@@ -15,7 +15,7 @@ function snr(fₗ, fₕ, d, ι, detector::Detector, system::Binary, n::Int=5000)
     amp²(f) = (F₊(detector) * amp₊(f, d, ι, system))^2 + (Fₓ(detector) * ampₓ(f, d, ι, system))^2
     amp²s = map(amp², fs)
     Sₙs = map(f -> Sₙ(f, detector), fs)
-    sqrt.(4 * trapz(fs, amp²s ./ Sₙs))
+    return sqrt.(4 * trapz(fs, amp²s ./ Sₙs))
 end
 
 struct LISA <: Detector
@@ -23,7 +23,7 @@ struct LISA <: Detector
 end
 
 F₊(detector::LISA) = 1.
-Fₓ(detector::LISA) = 0.
+Fₓ(detector::LISA) = 1.
 
 function Sₙ(f, detector::LISA)
     cSI = 299792458.0
