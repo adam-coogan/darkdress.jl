@@ -112,21 +112,21 @@ fim_uncertainties(1e-2, 1, 500e6, π/3, 0., 0., lisa, dd, 2000)
 
 
 
-# "Bad terms"
-using HypergeometricFunctions: _₂F₁
-using SpecialFunctions: gamma
-B(b, x) = gamma(1 - b) * gamma(1 + b) - _₂F₁(1, -b, 1 - b, -x) / x^b
+# # "Bad terms"
+# using HypergeometricFunctions: _₂F₁
+# using SpecialFunctions: gamma
+# B(b, x) = gamma(1 - b) * gamma(1 + b) - _₂F₁(1, -b, 1 - b, -x) / x^b
 
-using Plots
+# using Plots
 
-function plot_stuff()
-    bs = range(1.6, 3.833, step=0.5)
-    log10_xs = range(-5, 5, length=100)
+# function plot_stuff()
+#     bs = range(1.6, 3.833, step=0.5)
+#     log10_xs = range(-5, 5, length=100)
 
-    Plots.plot(log10_xs, -B.(bs[1], 10 .^ log10_xs), label="b = $(bs[1])")
-    for b in bs[2:end]
-        Plots.plot!(log10_xs, -B.(b, 10 .^ log10_xs), label="b = $b")
-    end
-    xaxis!("log_10(x)", [-5, 5])
-    yaxis!("-B(b, x)", :log10, [1e-20, 1e20])
-end
+#     Plots.plot(log10_xs, -B.(bs[1], 10 .^ log10_xs), label="b = $(bs[1])")
+#     for b in bs[2:end]
+#         Plots.plot!(log10_xs, -B.(b, 10 .^ log10_xs), label="b = $b")
+#     end
+#     xaxis!("log_10(x)", [-5, 5])
+#     yaxis!("-B(b, x)", :log10, [1e-20, 1e20])
+# end
