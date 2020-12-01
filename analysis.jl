@@ -5,6 +5,7 @@ include("Detectors.jl")
 using Zygote
 using Revise
 using Trapz
+using Plots
 using LinearAlgebra: eigvals, cholesky
 using .Utils: geomspace
 using .Detectors: Detector, LISA, snr, Sₙ, F₊, Fₓ
@@ -110,7 +111,26 @@ dd = DynamicDress(1e3, 1., 200., 7/3.)
 snr(1e-2, 1., 500e6, 0., lisa, dd)
 fim_uncertainties(1e-2, 1, 500e6, π/3, 0., 0., lisa, dd, 2000)
 
+using Plots
 
+function plot_ts()
+    fs = 10.0.^range(-1, 20, step=0.1)
+    ts = zeros(length(fs))
+    ts_v = zeros(length(fs))
+    for i in range(1, length(ts), step=1)
+        # ts_v[i] = t_to_c(fs[i], system)
+        t_v = t_to_c(fs[i], VacuumBinary(dd))
+        ts[i] = abs((t_to_c(fs[i], dd) - t_v) / ((t_to_c(fs[i], dd) + t_v) / 2)) * 100
+        if ts[i] < 0
+            ts[i] = NaN
+        end
+    end
+    println(ts)
+    scatter(fs, ts)#, color="red", linestyle=:solid, label="D")
+    # plot!(fs, ts_v, color="blue", linestyle=:dash, label="V")
+    xaxis!("log_10(f / Hz)", :log10)
+    yaxis!("% difference, t->c V and D", [-0.00001, 0.00001])
+end
 
 # # "Bad terms"
 # using HypergeometricFunctions: _₂F₁
