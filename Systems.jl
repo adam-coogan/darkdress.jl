@@ -3,7 +3,7 @@ module Systems
 using Zygote
 using HypergeometricFunctions: _₂F₁
 using SpecialFunctions: gamma
-using ..Utils: Gₙ, c, pc_to_km, km_to_pc, heaviside
+using ..Utils: Gₙ, c, pc_to_km, km_to_pc
 
 # FloatOrAbsArr = Union{AbstractFloat, AbstractArray{AbstractFloat, 1}}
 
@@ -257,10 +257,16 @@ function t_to_c(f, system::DynamicDress)
     x = (f / f_b(system))^(γₕ(system) - γₗ(system))
     tᵥ = t_to_c(f, VacuumBinary(system))
     norm = ΔΦ_to_c_norm(system)
-    Δt = heaviside(1e3-x) * norm / (2 * π * f_b(system) * (1 + γₗ(system))) * (
-        (1 + γₗ(system)) / ((1 + x) * x^b) + gamma(1 - b) * gamma(1 + b) - _₂F₁(1, -b, 1 - b, -x) / x^b
-    )
-    Δt += heaviside(x-1e3) * norm * γₕ(system) / (2 * π * f_b(system) * (1 + γₕ(system))) / (f / f_b(system))^(γₕ(system)+1)
+
+    Δt = if x ≥ 1e3
+        # Power series expansion for stability at large x
+        norm * γₕ(system) / (2 * π * f_b(system) * (1 + γₕ(system))) / (f / f_b(system))^(γₕ(system)+1)
+    else
+        norm / (2 * π * f_b(system) * (1 + γₗ(system))) * (
+            (1 + γₗ(system)) / ((1 + x) * x^b) + gamma(1 - b) * gamma(1 + b) - _₂F₁(1, -b, 1 - b, -x) / x^b
+        )
+    end
+
     return tᵥ - Δt
 end
 
