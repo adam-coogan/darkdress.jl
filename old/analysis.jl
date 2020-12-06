@@ -6,7 +6,7 @@ using Zygote
 using Revise
 using Trapz
 using Plots
-using LinearAlgebra: eigvals, cholesky
+using LinearAlgebra: eigvals, cholesky, Diagonal
 using .Utils: geomspace
 using .Detectors: Detector, LISA, snr, Sₙ, F₊, Fₓ
 using .Systems: Binary, VacuumBinary, DynamicDress, amp₊, Ψ, length, t_to_c, ℳ, Φ_to_c
@@ -31,15 +31,16 @@ Computes the numerator of the integrand of the Fisher information matrix:
 where i and j index the extrinsic and intrinsic parameters of the system:
 
     d, ι, Φ_c, t_c, system...
-"""
-function fim_integrand_num(f, d, ι, Φ_c, t_c, system::T) where T <: Binary
-    # amp_fn(d, ι, Φ_c, t_c, system) = amp₊(f, d, ι, system)
-    # ∂amp₊ = collect(gradient(amp_fn, d, ι, Φ_c, t_c, system))
-    # Ψ_fn(d, ι, Φ_c, t_c, system) = Ψ(f, d, Φ_c, t_c, system)
-    # ∂Ψ = collect(gradient(Ψ_fn, d, ι, Φ_c, t_c, system))
 
-    amp_fn(d, ι, Φ_c, system) = amp₊(f, d, ι, system)
-    ∂amp₊ = collect(gradient(amp_fn, d, ι, Φ_c, system))
+Differentiate w.r.t. all variables:
+    amp_fn(d, ι, Φ_c, t_c, system) = amp₊(f, d, ι, system)
+    ∂amp₊ = collect(gradient(amp_fn, d, ι, Φ_c, t_c, system))
+    Ψ_fn(d, ι, Φ_c, t_c, system) = Ψ(f, d, Φ_c, t_c, system)
+    ∂Ψ = collect(gradient(Ψ_fn, d, ι, Φ_c, t_c, system))
+"""
+function fim_integrand_num(f, d, ι, Φ_c, t_c, system::VacuumBinary)
+    amp₊_fn(d, ι, Φ_c, system) = amp₊(f, d, ι, system)
+    ∂amp₊ = collect(gradient(amp₊_fn, d, ι, Φ_c, system))
     Ψ_fn(d, ι, Φ_c, system) = Ψ(f, d, Φ_c, t_c, system)
     ∂Ψ = collect(gradient(Ψ_fn, d, ι, Φ_c, system))
 
@@ -55,10 +56,6 @@ function fim_integrand_num(f, d, ι, Φ_c, t_c, system::T) where T <: Binary
 
     ∂amp₊ = collect(Iterators.flatten(values.(∂amp₊)))
     ∂Ψ = collect(Iterators.flatten(values.(∂Ψ)))
-    # ∂ᵢ → ∂/∂log(θᵢ)
-    # param_vals = [system.m₁, system.m₂]
-    # ∂amp₊ .*= param_vals
-    # ∂Ψ .*= param_vals
     return 4 * (∂amp₊ * ∂amp₊' + amp₊(f, d, ι, system)^2 * ∂Ψ * ∂Ψ')
 end
 
@@ -79,24 +76,15 @@ function fim_uncertainties(fₗ, fₕ, d, ι, Φ_c, t_c, detector::Detector, sys
     Γ = fim(fₗ, fₕ, d, ι, Φ_c, t_c, detector, system, n)
     Γ = (Γ .+ Γ') ./ 2
 
-    @assert all(eigvals(Γ) .> 0) eigvals(Γ)
-    # println("evs: ", eigvals(Γ))
-    # println("")
-    
-    # L = cholesky(Γ).L
-    # L⁻¹ = inv(L)
-    # Σ = L⁻¹' * L⁻¹
-    # println("Σ * Γ")
-    # for i in 1:size(Σ * Γ)[1]
-    #     println((L⁻¹' * ((L⁻¹ * L) * L'))[i, :])
-    # end
+    # Σ = inv(Γ)
+    # println(eigvals(Γ))
+    # @assert all(eigvals(Γ) .> 0) eigvals(Γ)
 
-    Σ = inv(Γ)
-    # println("Σ * Γ")
-    # for i in 1:size(Σ * Γ)[1]
-    #     println((Γ * Σ)[i, :])
-    # end
-    # println("")
+    scales = sqrt(inv(Diagonal(Γ)))
+    Γr = scales * Γ * scales
+    println("evs: ", eigvals(Γr))
+    @assert all(eigvals(Γr) .> 0) eigvals(Γr)
+    Σ = scales * inv(Γr) * scales
 
     return sqrt.([Σ[i, i] for i in 1:size(Σ)[1]])
 end
@@ -125,11 +113,10 @@ function plot_ts()
             ts[i] = NaN
         end
     end
-    println(ts)
-    scatter(fs, ts)#, color="red", linestyle=:solid, label="D")
+    scatter(fs, ts, color=:red)#, color="red", linestyle=:solid, label="D")
     # plot!(fs, ts_v, color="blue", linestyle=:dash, label="V")
     xaxis!("log_10(f / Hz)", :log10)
-    yaxis!("% difference, t->c V and D", [-0.00001, 0.00001])
+    yaxis!("% difference, t->c V and D", [-0.000000001, 0.000000001])
 end
 
 # # "Bad terms"

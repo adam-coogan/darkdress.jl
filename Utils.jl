@@ -20,6 +20,5 @@ export geomspace, logspace, heaviside
 
 geomspace(x_start, x_end, n::Int=20) = [10^y for y in range(log10(x_start), log10(x_end), length=n)]
 logspace(l_start, l_end, n::Int=20) = [10^y for y in range(l_start, l_end, length=n)]
-heaviside(x) = 0.5 * (sign(x) + 1)
 
 end  # module Utils
