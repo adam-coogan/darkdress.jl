@@ -38,7 +38,6 @@ length(system::T) where T <: Binary = length(values(system))
 # Static dress
 struct StaticDress <: HypableDress
     γₛ::Float64
-    # f_eq::Float64
     c_f::Float64
     ℳ::Float64
     Φ_c::Float64
@@ -46,7 +45,11 @@ struct StaticDress <: HypableDress
     dₗ_ι::Float64
 end
 
-ℳ(system::StaticDress) = system.ℳ
+# γₛ(sd::StaticDress) = sd.γₛ
+# c_f(sd::StaticDress) = sd.c_f
+ℳ(sd::StaticDress) = sd.ℳ
+q(sd::StaticDress) = sd.q
+intrinsics(StaticDress) = (:γₛ, :c_f, :ℳ)
 
 function c_f(m₁, m₂, ρₛ, γₛ)
     # Λ = 3.0
@@ -58,12 +61,9 @@ function c_f(m₁, m₂, ρₛ, γₛ)
     return c_df / c_gw * (Gₙ * M / π^2)^((11 - 2 * γₛ) / 6)
 end
 
-# Units: [m₁] = [m₂] = M⊙, [ρₛ] = M⊙ / pc^3, [dL] = pc.
-function make_static_dress(m₁, m₂, ρₛ, γₛ, dₗ=1e8, ι=0.0, Φ_c=0.0, t_c=0.0)
-    m₁ *= MSun
-    m₂ *=  MSun
-    ρₛ *= MSun / pc^3
-    dₗ *= pc
+function make_static_dress(m₁, m₂, ρₛ, γₛ, dₗ=1e8*pc, ι=0.0, Φ_c=0.0, t_c=0.0)
+    @assert m₁ > m₂
+    @assert m₂ > 0
     t̃_c = t_c + dₗ / c
     dₗ_ι = log((1 + cos(ι)^2) / (2 * dₗ))
     return StaticDress(γₛ, c_f(m₁, m₂, ρₛ, γₛ), ℳ(m₁, m₂), Φ_c, t̃_c, dₗ_ι)
@@ -71,44 +71,45 @@ end
 
 # Converter
 function hypify(sd::StaticDress)
-    b = 5 / (11 - 2 * sd.γₛ)
+    ϑ = 5 / (11 - 2 * sd.γₛ)
     fₜ = sd.c_f^(3 / (11 - 2 * sd.γₛ))
-    return HypParams(ψᵥ(sd), b, 0., 1., fₜ)
+    return HypParams(ψᵥ(sd), ϑ, 0., 1., fₜ)
 end
 
 # Dynamic dress
 struct DynamicDress <: HypableDress
+    γₛ::Float64
+    c_f::Float64
     ℳ::Float64
     q::Float64
-    ρₛ::Float64
-    γₛ::Float64
     Φ_c::Float64
     t̃_c::Float64
     dₗ_ι::Float64
 end
 
-m₁(dd::DynamicDress) = (1 + dd.q)^(1/5) / dd.q^(3/5) * dd.ℳ
-m₂(dd::DynamicDress) = (1 + dd.q)^(1/5) * dd.q^(2/5) * dd.ℳ
-ρₛ(dd::DynamicDress) = dd.ρₛ
-γₛ(dd::DynamicDress) = dd.γₛ
+# ρₛ(dd::DynamicDress) = dd.ρₛ
+# γₛ(dd::DynamicDress) = dd.γₛ
+# c_f(dd::DynamicDress) = dd.c_f
 ℳ(dd::DynamicDress) = dd.ℳ
 q(dd::DynamicDress) = dd.q
+m₁(dd::DynamicDress) = (1 + dd.q)^(1/5) / dd.q^(3/5) * dd.ℳ
+m₂(dd::DynamicDress) = (1 + dd.q)^(1/5) * dd.q^(2/5) * dd.ℳ
 
-# Units: [m₁] = [m₂] = M⊙, [ρₛ] = M⊙ / pc^3, [dL] = pc.
-function make_dynamic_dress(m₁, m₂, ρₛ, γₛ, dₗ=1e8, ι=0.0, Φ_c=0.0, t_c=0.0)
-    @assert m₁ > m₂
-    m₁ *= MSun
-    m₂ *=  MSun
-    ρₛ *= MSun / pc^3
-    dₗ *= pc
-    t̃_c = t_c + dₗ / c
-    dₗ_ι = log((1 + cos(ι)^2) / (2 * dₗ))
-    return DynamicDress(ℳ(m₁, m₂), m₂ / m₁, ρₛ, γₛ, Φ_c, t̃_c, dₗ_ι)
+# Get intrinsic parameters
+function intrinsics(T::Type)
+    if T == StaticDress
+        return (:γₛ, :c_f, :ℳ)
+    elseif T == DynamicDress
+        return (:γₛ, :c_f, :ℳ, :q)
+    end
 end
 
-function make_static_dress(dd::DynamicDress)
-    return StaticDress(γₛ(dd), c_f(m₁(dd), m₂(dd), ρₛ(dd), γₛ(dd)), ℳ(m₁(dd), m₂(dd)), dd.Φ_c, dd.t̃_c, dd.dₗ_ι)
+function make_dynamic_dress(m₁, m₂, ρₛ, γₛ, dₗ=1e8 * pc, ι=0.0, Φ_c=0.0, t_c=0.0)
+    sd = make_static_dress(m₁, m₂, ρₛ, γₛ, dₗ, ι, Φ_c, t_c)
+    return DynamicDress(sd.γₛ, sd.c_f, ℳ(sd), m₂ / m₁, sd.Φ_c, sd.t̃_c, sd.dₗ_ι)
 end
+
+make_static_dress(dd::DynamicDress) = StaticDress(dd.γₛ, dd.c_f, ℳ(dd), dd.Φ_c, dd.t̃_c, dd.dₗ_ι)
 
 # TODO: rederive with new waveform model
 function f_b(m₁, m₂, γₛ)
@@ -123,55 +124,56 @@ end
 # Converter
 function hypify(dd::DynamicDress)
     f_eq = hypify(make_static_dress(dd)).fₜ
+    fₜ = f_b(m₁(dd), m₂(dd), dd.γₛ)
 
     γₑ = 5/2  # TODO: CHANGE!
     
-    b_d = 5 / (2 * γₑ)
-    c_d = (11 - 2 * (γₛ(dd) + γₑ)) / 3
-    d_d = (5 + 2 * γₑ) / (2 * (8 - γₛ(dd))) * (f_eq / f_b(m₁(dd), m₂(dd), γₛ(dd)))^((11 - 2 * γₛ(dd)) / 3)
+    ϑ = 5 / (2 * γₑ)
+    λ = (11 - 2 * (dd.γₛ + γₑ)) / 3
+    η = (5 + 2 * γₑ) / (2 * (8 - dd.γₛ)) * (f_eq / fₜ)^((11 - 2 * dd.γₛ) / 3)
 
-    return HypParams(ψᵥ(dd), b_d, c_d, d_d, f_b(m₁(dd), m₂(dd), γₛ(dd)))
+    return HypParams(ψᵥ(dd), ϑ, λ, η, fₜ)
 end
 
 # Convenient waveform parametrization
 struct HypParams
     ψᵥ::Float64
-    b::Float64
-    c::Float64
-    d::Float64
+    ϑ::Float64
+    λ::Float64
+    η::Float64
     fₜ::Float64
 end
 
 function Φ_to_c_indef(f, hp::HypParams)
     x = f / hp.fₜ
-    if hp.c == 0 && hp.d == 1
-        return hp.ψᵥ / f^(5/3) * _₂F₁(1, hp.b, 1 + hp.b, -x^(-5 / (3 * hp.b)))
+    if hp.λ == 0 && hp.η == 1
+        return hp.ψᵥ / f^(5/3) * _₂F₁(1, hp.ϑ, 1 + hp.ϑ, -x^(-5 / (3 * hp.ϑ)))
     else
-        return hp.ψᵥ / f^(5/3) * (1 - hp.d * x^(-hp.c) * (
-            1 - _₂F₁(1, hp.b, 1 + hp.b, -x^(-5 / (3 * hp.b)))
+        return hp.ψᵥ / f^(5/3) * (1 - hp.η * x^(-hp.λ) * (
+            1 - _₂F₁(1, hp.ϑ, 1 + hp.ϑ, -x^(-5 / (3 * hp.ϑ)))
         ))
     end
 end
 
 function t_to_c_indef(f, hp::HypParams)
     x = f / hp.fₜ
-    if hp.c == 0 && hp.d == 1
-        return 5 * hp.ψᵥ * _₂F₁(1, 8*hp.b/5, 1 + 8*hp.b/5, -x^(-5/(3*hp.b))) / (
+    if hp.λ == 0 && hp.η == 1
+        return 5 * hp.ψᵥ * _₂F₁(1, 8*hp.ϑ/5, 1 + 8*hp.ϑ/5, -x^(-5/(3*hp.ϑ))) / (
             16 * π * f^(8/3)
         )
     else
         # Can hit unsafe_gamma
-        coeff = hp.ψᵥ * x^(-hp.c) / (16 * π * (1 + hp.c) * (8 + 3 * hp.c) * f^(8/3))
-        term₁ = 5 * (1 + hp.c) * (8 + 3 * hp.c) * x^hp.c
-        term₂ = 8 * hp.c * (8 + 3 * hp.c) * hp.d * _₂F₁(1, hp.b, 1 + hp.b, -x^(-5/(3*hp.b)))
-        term₃ = -40 * (1 + hp.c) * hp.d * _₂F₁(
+        coeff = hp.ψᵥ * x^(-hp.λ) / (16 * π * (1 + hp.λ) * (8 + 3 * hp.λ) * f^(8/3))
+        term₁ = 5 * (1 + hp.λ) * (8 + 3 * hp.λ) * x^hp.λ
+        term₂ = 8 * hp.λ * (8 + 3 * hp.λ) * hp.η * _₂F₁(1, hp.ϑ, 1 + hp.ϑ, -x^(-5/(3*hp.ϑ)))
+        term₃ = -40 * (1 + hp.λ) * hp.η * _₂F₁(
             1,
-            -1/5 * hp.b * (8 + 3 * hp.c),
-            1 - 1/5 * hp.b * (8 + 3 * hp.c),
-            -x^(5/(3*hp.b))
+            -1/5 * hp.ϑ * (8 + 3 * hp.λ),
+            1 - 1/5 * hp.ϑ * (8 + 3 * hp.λ),
+            -x^(5/(3*hp.ϑ))
         )
-        term₄ = -8 * hp.c * hp.d * (3 + 3 * hp.c + 5 * _₂F₁(
-            1, 1/5 * hp.b * (8 + 3 * hp.c), 1 + 1/5 * hp.b * (8 + 3 * hp.c), -x^(-5/(3 * hp.b))
+        term₄ = -8 * hp.λ * hp.η * (3 + 3 * hp.λ + 5 * _₂F₁(
+            1, 1/5 * hp.ϑ * (8 + 3 * hp.λ), 1 + 1/5 * hp.ϑ * (8 + 3 * hp.λ), -x^(-5/(3 * hp.ϑ))
         ))
         return coeff * (term₁ + term₂ + term₃ + term₄)
     end
@@ -182,14 +184,14 @@ t_to_c(f, f_c, hp::HypParams) = t_to_c_indef(f, hp) - t_to_c_indef(f_c, hp)
 
 function d²Φ_dt²(f, hp::HypParams)
     x = f / hp.fₜ
-    if hp.c == 0 && hp.d == 1
-        return 12 * π^2 * f^(11/3) * (1 + x^(-5/(3*hp.b))) / (5 * hp.ψᵥ)
+    if hp.λ == 0 && hp.η == 1
+        return 12 * π^2 * f^(11/3) * (1 + x^(-5/(3*hp.ϑ))) / (5 * hp.ψᵥ)
     else
-        return 12 * π^2 * f^(11/3) * (1 + x^(5/(3*hp.b)) * x^hp.c) / (
+        return 12 * π^2 * f^(11/3) * (1 + x^(5/(3*hp.ϑ)) * x^hp.λ) / (
             hp.ψᵥ * (
-                -5 * hp.d - 3 * hp.c * hp.d + 5 * x^hp.c + x^(5/(3*hp.b)) * (5*x^hp.c - 3*hp.c*hp.d)
-                + 3 * hp.c * hp.d * (1 + x^(5/(3*hp.b))) * _₂F₁(
-                    1, hp.b, 1 + hp.b, -x^(5/(3*hp.b))
+                -5 * hp.η - 3 * hp.λ * hp.η + 5 * x^hp.λ + x^(5/(3*hp.ϑ)) * (5*x^hp.λ - 3*hp.λ*hp.η)
+                + 3 * hp.λ * hp.η * (1 + x^(5/(3*hp.ϑ))) * _₂F₁(
+                    1, hp.ϑ, 1 + hp.ϑ, -x^(5/(3*hp.ϑ))
                 )
             )
         )
@@ -213,7 +215,6 @@ end
 # LISA noise curve
 Sₙ_LISA(f) = 1 / f^14 * 1.80654e-17 * (0.000606151 + f^2) * (3.6864e-76 + 3.6e-37 * f^8 + 2.25e-30 * f^10 + 8.66941e-21 * f^14)
 
-# Model-independent code
 # trapz for matrix-values functions
 function trapz_1d_mat(xs, ys)
     @assert length(xs) == length(ys)
@@ -224,9 +225,12 @@ function trapz_1d_mat(xs, ys)
     return result
 end
 
+###################
+# Fisher analysis #
+###################
 # Factors for rescaling some parameter derivatives to relative ones (d/dx d/dlog(x))
 rescalings(sd::StaticDress) = [sd.γₛ, sd.c_f, sd.ℳ, 1., 1., 1.]
-rescalings(dd::DynamicDress) = [dd.ℳ, dd.q, dd.ρₛ, dd.γₛ, 1., 1., 1.]
+rescalings(dd::DynamicDress) = [dd.γₛ, dd.c_f, dd.ℳ, dd.q, 1., 1., 1.]
 
 function fim_integrand_num(f, f_c, system::T) where T <: Binary
     ∂amp₊ = collect(values(gradient(s -> amp₊(f, s), system)[1]))
@@ -259,8 +263,6 @@ function fim_uncertainties(fₗ, fₕ, f_c, system::T, n=1000) where T <: Binary
     scales = sqrt(inv(Diagonal(Γ)))
     Γr = scales * Γ * scales
     Σ = scales * inv(Γr) * scales
-    # println([Σ[i, i] for i in 1:size(Σ)[1]])
-    # println(eigvals(Γr))
 
     # Checks
     @assert all(eigvals(Γr) .> 0) eigvals(Γr)
@@ -273,51 +275,98 @@ function sig_noise_ratio(fₗ, fₕ, system::T, n::Int=5000) where T <: Binary
     integrand(f) = amp₊(f, system)^2 / Sₙ_LISA(f)
     return √(4 * trapz(fs, integrand.(fs)))
 end
-# Model-independent code ends
 
-################
-# Basic checks #
-################
-# Static checks
+#################
+# Static checks #
+#################
 fₗ = 2.26e-2  # frequency 5 years before merger (HACKY ESTIMATE)
 fₕ = 4.39701  # ISCO frequency (HACKY ESTIMATE)
-sd = make_static_dress(1e3, 1., 226., 7/3)
+sd = make_static_dress(1e3 * MSun, 1. * MSun, 226. * MSun/pc^3, 7/3)
+sd = make_static_dress(1e3 * MSun, 1. * MSun, 1e-2 * MSun/pc^3, 2.4)
 println(log10(fim_uncertainties(fₗ, fₕ, fₕ, sd, 100)[1]))
 println(log10(fim_uncertainties(fₗ, fₕ, fₕ, sd, 100)[2]))
 println(log10(fim_uncertainties(fₗ, fₕ, fₕ, sd, 100)[3]))
 sig_noise_ratio(fₗ, fₕ, sd, 1000)  # agrees with David's notebook
 
-# Dynamic checks
+##################
+# Dynamic checks #
+##################
 fₗ = 2.26e-2  # frequency 5 years before merger (HACKY ESTIMATE)
 fₕ = 4.39701  # ISCO frequency (HACKY ESTIMATE)
-dd = make_dynamic_dress(1e3, 1., 226., 7/3)
+dd = make_dynamic_dress(1e3 * MSun, 1. * MSun, 226. * MSun/pc^3, 2.25001)#7/3)
 println(log10(fim_uncertainties(fₗ, fₕ, fₕ, dd, 100)[1]))
 println(log10(fim_uncertainties(fₗ, fₕ, fₕ, dd, 100)[2]))
 println(log10(fim_uncertainties(fₗ, fₕ, fₕ, dd, 100)[3]))
+println(log10(fim_uncertainties(fₗ, fₕ, fₕ, dd, 100)[4]))
 sig_noise_ratio(fₗ, fₕ, dd, 1000)  # agrees with David's notebook
 
 
 ############
 # Plotting #
 ############
-function plot_dynamic_errs(m₁, m₂, i)
-    log10_ρₛs = -2:0.6:3
-    γₛs = 2.3:0.004:2.4
-
-    fₕ = f_c = f_isco(m₁ * MSun)
+function plot_static_errs(m₁, m₂)
+    fₕ = f_c = f_isco(m₁)
     t_c = 5.0 * yr_to_s  # scales
+    n_intrinsic = length(intrinsics(StaticDress))
 
     function fn(log10_ρₛ, γₛ)
-        system = make_dynamic_dress(m₁, m₂, 10.0^log10_ρₛ, γₛ)
-        fₗ = find_zero(f -> t_to_c(f, f_c, system) - t_c, (0.001 * f_c, f_c))
-        return log10(fim_uncertainties(fₗ, fₕ, fₕ, system, 80)[i])
+        sd = make_static_dress(m₁, m₂, 10^log10_ρₛ * MSun/pc^3, γₛ)
+        fₗ = find_zero(f -> t_to_c(f, f_c, sd) - t_c, (0.001 * f_c, f_c))
+        return log10.(fim_uncertainties(fₗ, fₕ, fₕ, sd, 80)[1:n_intrinsic])
     end
 
-    # heatmap(log10_ρₛs, γₛs, fn, fillcolor=cgrad(:inferno, rev=true), size=(550, 500))
-    contour(log10_ρₛs, γₛs, fn, fill=true, fillcolor=cgrad(:inferno, rev=true), size=(550, 500))
-    xaxis!(L"\log_{10} \rho_s", (minimum(log10_ρₛs), maximum(log10_ρₛs)))
-    yaxis!(L"\gamma_s", (minimum(γₛs), maximum(γₛs)))
-    title!("$(fieldnames(DynamicDress)[i])")
+    # Apply to grid
+    log10_ρₛs = -2:0.4:3
+    γₛs = 2.25:0.01:2.4
+    uncertainties = zeros(length(γₛs), length(log10_ρₛs), n_intrinsic)
+    print(size(uncertainties))
+    for (i, log10_ρₛ) in enumerate(log10_ρₛs)
+        for (j, γₛ) in enumerate(γₛs)
+            uncertainties[j, i, :] = fn(log10_ρₛ, γₛ)
+        end
+    end
+    
+    plots = []
+    for i in 1:size(uncertainties, 3)
+        p = contour(log10_ρₛs, γₛs, uncertainties[:, :, i], fill=true, fillcolor=cgrad(:inferno, rev=true), size=(550, 500))
+        xaxis!(L"\log_{10} \rho_s", (minimum(log10_ρₛs), maximum(log10_ρₛs)))
+        yaxis!(L"\gamma_s", (minimum(γₛs), maximum(γₛs)))
+        title!("$(fieldnames(StaticDress)[i])")
+        push!(plots, p)
+    end
+    plot(plots...)
+end
+
+function plot_dynamic_errs(m₁, m₂)
+    fₕ = f_c = f_isco(m₁)
+    t_c = 5.0 * yr_to_s  # scales
+    n_intrinsic = length(intrinsics(DynamicDress))
+
+    function fn(log10_ρₛ, γₛ)
+        sd = make_dynamic_dress(m₁, m₂, 10^log10_ρₛ * MSun/pc^3, γₛ)
+        fₗ = find_zero(f -> t_to_c(f, f_c, sd) - t_c, (0.001 * f_c, f_c))
+        return log10.(fim_uncertainties(fₗ, fₕ, fₕ, sd, 80)[1:n_intrinsic])
+    end
+
+    # Apply to grid
+    log10_ρₛs = -2:0.4:3
+    γₛs = 2.25001:0.01:2.4
+    uncertainties = zeros(length(γₛs), length(log10_ρₛs), n_intrinsic)
+    for (i, log10_ρₛ) in enumerate(log10_ρₛs)
+        for (j, γₛ) in enumerate(γₛs)
+            uncertainties[j, i, :] = fn(log10_ρₛ, γₛ)
+        end
+    end
+    
+    plots = []
+    for i in 1:size(uncertainties, 3)
+        p = contour(log10_ρₛs, γₛs, uncertainties[:, :, i], fill=true, fillcolor=cgrad(:inferno, rev=true), size=(550, 500))
+        xaxis!(L"\log_{10} \rho_s", (minimum(log10_ρₛs), maximum(log10_ρₛs)))
+        yaxis!(L"\gamma_s", (minimum(γₛs), maximum(γₛs)))
+        title!("$(fieldnames(DynamicDress)[i])")
+        push!(plots, p)
+    end
+    plot(plots...)
 end
 
 function plot_snr(m₁, m₂)
@@ -328,7 +377,7 @@ function plot_snr(m₁, m₂)
     t_c = 5.0 * yr_to_s  # scales
 
     function fn(log10_ρₛ, γₛ)
-        system = make_static_dress(m₁, m₂, 10^log10_ρₛ, γₛ)
+        system = make_static_dress(m₁, m₂, 10^log10_ρₛ * MSun/pc^3, γₛ)
         fₗ = find_zero(f -> t_to_c(f, f_c, system) - t_c, (0.001 * f_c, f_c))
         return sig_noise_ratio(fₗ, fₕ, system)
     end
@@ -342,26 +391,6 @@ function plot_snr(m₁, m₂)
     )
     xaxis!(L"\log_{10} \rho_s")
     yaxis!(L"\gamma_s")
-end
-
-function plot_static_errs(m₁, m₂, i)
-    log10_ρₛs = -2:0.6:3
-    γₛs = 1.9:0.05:7/3
-
-    fₕ = f_c = f_isco(m₁ * MSun)
-    t_c = 5.0 * yr_to_s  # scales
-
-    function fn(log10_ρₛ, γₛ)
-        system = make_static_dress(m₁, m₂, 10.0^log10_ρₛ, γₛ)
-        fₗ = find_zero(f -> t_to_c(f, f_c, system) - t_c, (0.001 * f_c, f_c))
-        return log10(fim_uncertainties(fₗ, fₕ, fₕ, system, 80)[i])
-    end
-
-    # heatmap(log10_ρₛs, γₛs, fn, fillcolor=cgrad(:inferno, rev=true), size=(550, 500))
-    contour(log10_ρₛs, γₛs, fn, fill=true, fillcolor=cgrad(:inferno, rev=true), size=(550, 500))
-    xaxis!(L"\log_{10} \rho_s", (minimum(log10_ρₛs), maximum(log10_ρₛs)))
-    yaxis!(L"\gamma_s", (minimum(γₛs), maximum(γₛs)))
-    title!("$(fieldnames(StaticDress)[i])")
 end
 
 ################
