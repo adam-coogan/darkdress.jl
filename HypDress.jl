@@ -26,6 +26,8 @@ rₛ(m₁, ρₛ, γₛ) = ((3 - γₛ) * 0.2^(3 - γₛ) * m₁ / (2 * π * ρ�
 ψᵥ(m₁::Float64, m₂::Float64) = 1/16 * (c^3 / (π * Gₙ * ℳ(m₁, m₂)))^(5/3)
 
 abstract type Binary end
+
+# Phase can be converted to the hypergeometric parametrization
 abstract type HypableDress <: Binary end
 
 values(system::T) where T <: Binary = (fn -> getfield(system, fn)).(fieldnames(T))
@@ -67,10 +69,6 @@ function make_static_dress(m₁, m₂, ρₛ, γₛ, dₗ=1e8, ι=0.0, Φ_c=0.0,
     return StaticDress(γₛ, c_f(m₁, m₂, ρₛ, γₛ), ℳ(m₁, m₂), Φ_c, t̃_c, dₗ_ι)
 end
 
-function make_static_dress(dd::DynamicDress)
-    return StaticDress(dd.γₛ, c_f(dd.m₁, dd.m₂, dd.ρₛ, dd.γₛ), ℳ(dd.m₁, dd.m₂), dd.Φ_c, dd.t̃_c, dd.dₗ_ι)
-end
-
 # Converter
 function hypify(sd::StaticDress)
     b = 5 / (11 - 2 * sd.γₛ)
@@ -78,10 +76,10 @@ function hypify(sd::StaticDress)
     return HypParams(ψᵥ(sd), b, 0., 1., fₜ)
 end
 
-# Static dress
+# Dynamic dress
 struct DynamicDress <: HypableDress
-    m₁::Float64
-    m₂::Float64
+    ℳ::Float64
+    q::Float64
     ρₛ::Float64
     γₛ::Float64
     Φ_c::Float64
@@ -89,19 +87,30 @@ struct DynamicDress <: HypableDress
     dₗ_ι::Float64
 end
 
-ℳ(system::DynamicDress) = ℳ(system.m₁, system.m₂)
+m₁(dd::DynamicDress) = (1 + dd.q)^(1/5) / dd.q^(3/5) * dd.ℳ
+m₂(dd::DynamicDress) = (1 + dd.q)^(1/5) * dd.q^(2/5) * dd.ℳ
+ρₛ(dd::DynamicDress) = dd.ρₛ
+γₛ(dd::DynamicDress) = dd.γₛ
+ℳ(dd::DynamicDress) = dd.ℳ
+q(dd::DynamicDress) = dd.q
 
 # Units: [m₁] = [m₂] = M⊙, [ρₛ] = M⊙ / pc^3, [dL] = pc.
 function make_dynamic_dress(m₁, m₂, ρₛ, γₛ, dₗ=1e8, ι=0.0, Φ_c=0.0, t_c=0.0)
+    @assert m₁ > m₂
     m₁ *= MSun
     m₂ *=  MSun
     ρₛ *= MSun / pc^3
     dₗ *= pc
     t̃_c = t_c + dₗ / c
     dₗ_ι = log((1 + cos(ι)^2) / (2 * dₗ))
-    return DynamicDress(m₁, m₂, ρₛ, γₛ, Φ_c, t̃_c, dₗ_ι)
+    return DynamicDress(ℳ(m₁, m₂), m₂ / m₁, ρₛ, γₛ, Φ_c, t̃_c, dₗ_ι)
 end
 
+function make_static_dress(dd::DynamicDress)
+    return StaticDress(γₛ(dd), c_f(m₁(dd), m₂(dd), ρₛ(dd), γₛ(dd)), ℳ(m₁(dd), m₂(dd)), dd.Φ_c, dd.t̃_c, dd.dₗ_ι)
+end
+
+# TODO: rederive with new waveform model
 function f_b(m₁, m₂, γₛ)
     α₁ = 1.39191077
     α₂ = 0.443089063
@@ -115,14 +124,13 @@ end
 function hypify(dd::DynamicDress)
     f_eq = hypify(make_static_dress(dd)).fₜ
 
-    # f_b = 0.45  # TODO: CHANGE!
     γₑ = 5/2  # TODO: CHANGE!
     
     b_d = 5 / (2 * γₑ)
-    c_d = (11 - 2 * (dd.γₛ + γₑ)) / 3
-    d_d = (5 + 2 * γₑ) / (2 * (8 - dd.γₛ)) * (f_eq / f_b(dd.m₁, dd.m₂, dd.γₛ))^((11 - 2 * dd.γₛ) / 3)
+    c_d = (11 - 2 * (γₛ(dd) + γₑ)) / 3
+    d_d = (5 + 2 * γₑ) / (2 * (8 - γₛ(dd))) * (f_eq / f_b(m₁(dd), m₂(dd), γₛ(dd)))^((11 - 2 * γₛ(dd)) / 3)
 
-    return HypParams(ψᵥ(dd), b_d, c_d, d_d, f_b(dd.m₁, dd.m₂, dd.γₛ))
+    return HypParams(ψᵥ(dd), b_d, c_d, d_d, f_b(m₁(dd), m₂(dd), γₛ(dd)))
 end
 
 # Convenient waveform parametrization
@@ -216,6 +224,10 @@ function trapz_1d_mat(xs, ys)
     return result
 end
 
+# Factors for rescaling some parameter derivatives to relative ones (d/dx d/dlog(x))
+rescalings(sd::StaticDress) = [sd.γₛ, sd.c_f, sd.ℳ, 1., 1., 1.]
+rescalings(dd::DynamicDress) = [dd.ℳ, dd.q, dd.ρₛ, dd.γₛ, 1., 1., 1.]
+
 function fim_integrand_num(f, f_c, system::T) where T <: Binary
     ∂amp₊ = collect(values(gradient(s -> amp₊(f, s), system)[1]))
     ∂amp₊[∂amp₊ .=== nothing] .= 0.
@@ -226,13 +238,9 @@ function fim_integrand_num(f, f_c, system::T) where T <: Binary
     ∂Ψ = convert(Array{Float64}, ∂Ψ)
 
     # Convert to log derivatives for intrinsic parameters
-    if T == StaticDress
-        rescaling = [system.γₛ, system.c_f, system.ℳ, 1., 1., 1.]
-    elseif T == DynamicDress
-        rescaling = [system.m₁, system.m₂, system.ρₛ, system.γₛ, 1., 1., 1.]
-    end
-    ∂amp₊ .*= rescaling
-    ∂Ψ .*= rescaling
+    scales = rescalings(system)
+    ∂amp₊ .*= scales
+    ∂Ψ .*= scales
     
     return 4 * (∂amp₊ * ∂amp₊' + amp₊(f, system)^2 * ∂Ψ * ∂Ψ')
 end
@@ -246,7 +254,6 @@ end
 
 function fim_uncertainties(fₗ, fₕ, f_c, system::T, n=1000) where T <: Binary
     Γ = fim(fₗ, fₕ, f_c, system, n)
-    Γ = (Γ .+ Γ') ./ 2
 
     # Improve stability
     scales = sqrt(inv(Diagonal(Γ)))
