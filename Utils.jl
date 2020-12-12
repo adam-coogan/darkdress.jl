@@ -15,10 +15,13 @@ Sₙ_LISA(f) = 1 / f^14 * 1.80654e-17 * (0.000606151 + f^2) * (3.6864e-76 + 3.6e
 1D trapz for matrix-values functions
 """
 function trapz_1d_mat(xs, ys)
+    # @assert length(xs) == length(ys)
+    # result = zeros(size(ys[1]))
+    # for i in range(1, stop=length(xs) - 1)
+    #     result .+= (xs[i + 1] - xs[i]) * (ys[i + 1] + ys[i]) ./ 2
+    # end
+    # return result
+
     @assert length(xs) == length(ys)
-    result = zeros(size(ys[1]))
-    for i in range(1, stop=length(xs) - 1)
-        result .+= (xs[i + 1] - xs[i]) * (ys[i + 1] + ys[i]) ./ 2
-    end
-    return result
+    return sum((xs[2:end] .- xs[1:end - 1]) .* (ys[2:end] .+ ys[1:end - 1]) ./ 2)
 end
