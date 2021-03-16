@@ -233,8 +233,34 @@ function calcloglike(dd, fₗ, fₕ, x, dim=7, N_nodes=1000, linear = false)
     #return 0.5*dh^2/hh
 end
 
+# %%
+"""
+Basic checks of log likelihood. Expected result:
 
+    log L(s|s) = 42.32768093699036
+    log L(h|h) = 42.35282361247973
+    log L(h|s) = 5.606088315541141e-7
+"""
+function test_calcloglike()
+    fₗ = 0.022607529999065474
+    f_c = 4.397009835544328
+    dd_ref = DynamicDress(2.3333333333333335, 0.00018806659428775589, 3.151009407916561e31, 0.001, 0.0, 0.0, -56.3888135025341)
+    dd_alt = DynamicDress(2.27843666, 7.38694332e-5, 3.1518396596159997e31, 0.000645246955, 0.0, -1.98186232e+02, -56.3888135025341)
+    x_ref = [dd_ref.γₛ, dd_ref.c_f, dd_ref.ℳ / MSun, dd_ref.q, dd_ref.t̃_c]
+    x_alt = [dd_alt.γₛ, dd_alt.c_f, dd_alt.ℳ / MSun, dd_alt.q, dd_alt.t̃_c]
+    
+    ll_ss = calcloglike(dd_ref, fₗ, f_c, x_ref, 5, 100000, true)
+    ll_hh = calcloglike(dd_alt, fₗ, f_c, x_alt, 5, 100000, true)
+    ll_hs = calcloglike(dd_ref, fₗ, f_c, x_alt, 5, 100000, true) 
 
+    println("log L(s|s) = $(ll_ss)")
+    println("log L(h|h) = $(ll_hh)")
+    println("log L(h|s) = $(ll_hs)")
+end
+
+test_calcloglike()
+
+# %%
 function logliketest(x)
     y = (x .- x0)
     #print(size(y))
