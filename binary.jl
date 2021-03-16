@@ -134,14 +134,15 @@ struct DynamicDress <: HypableDress
     dₗ_ι
 end
 
-# TODO: rederive with new waveform model!
+# Fit using HaloFeedback data from 5 years before merger
 function f_b(m₁, m₂, γₛ)
-    α₁ = 1.39191077
-    α₂ = 0.443089063
-    β = 7.03764788e3
-    κ = -2.44956668
-    δ = 0.839699908
-    return β * (m₂ / MSun)^α₂ / (m₁ / MSun)^α₁ * (1 + κ * log10(γₛ) + δ)
+    β  = 0.8162599280541165
+    α₁ = 1.441237217113085
+    α₂ = 0.4511442198433961
+    ρ  = -0.49709119294335674
+    γᵣ = 1.4395688575650551
+
+    return β * (m₁ / (1e3 * MSun))^(-α₁) * (m₂ / MSun)^α₂ * (1 + ρ * log(γₛ / γᵣ))
 end
 
 # Getters
