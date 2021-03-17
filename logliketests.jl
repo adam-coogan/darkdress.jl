@@ -105,7 +105,7 @@ function plot_sample_loglikes()
     PyPlot.loglog(N_nodess, loglikes)
     PyPlot.xlabel("Number of nodes")
     PyPlot.ylabel("Log L(h|s)")
-    PyPlot.title("s: Eda+ system. h: samples from 0.01 * FIM.")
+    PyPlot.title("s: Eda+ system. h: samples from 0.01 * inv(FIM).")
     PyPlot.display(PyPlot.gcf())
 end
 
