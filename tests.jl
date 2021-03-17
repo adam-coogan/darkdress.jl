@@ -29,7 +29,18 @@ function test_fim_SNR()
 end
 
 # %%
-function test_calcloglike()
+"""
+Expected output:
+
+    SNR(s) = 9.200834846576726
+    SNR(h) = 9.200834590962279
+    log L(s|s) = 42.327680936990355
+    log L(h|h) = 42.35282361247973
+    log L(h|s) = 5.606088315541141e-7
+
+Accurately evaluating the last likelihood requires ~100000 points.
+"""
+function test_calcloglike(N_nodes=100000)
     dd_s = DynamicDress(
         2.3333333333333335, 0.00018806659428775589, 3.151009407916561e31, 0.001, 0.0, 0.0, -56.3888135025341
     )
@@ -39,12 +50,13 @@ function test_calcloglike()
     fₗ = 0.022607529999065474
     fc_s = f_isco(m₁(dd_s.ℳ, dd_s.q))
     fc_h = f_isco(m₁(dd_h.ℳ, dd_h.q))
+    fₕ = max(fc_s, fc_h)
     
     snr_s = calculate_SNR(dd_s, fₗ, fc_s, fc_s)
     snr_h = calculate_SNR(dd_s, fₗ, fc_h, fc_h)
-    ll_ss = calculate_loglike(dd_s, dd_s, fₗ, fc_s, fc_s, fc_s)
-    ll_hh = calculate_loglike(dd_h, dd_h, fₗ, fc_h, fc_h, fc_h)
-    ll_hs = calculate_loglike(dd_h, dd_s, fₗ, fc_s, fc_h, fc_s)
+    ll_ss = calculate_loglike(dd_s, dd_s, fₗ, fc_s, fc_s, fc_s; N_nodes)
+    ll_hh = calculate_loglike(dd_h, dd_h, fₗ, fc_h, fc_h, fc_h; N_nodes)
+    ll_hs = calculate_loglike(dd_h, dd_s, fₗ, fₕ, fc_h, fc_s; N_nodes)
 
     @assert isapprox(ll_ss, 1/2 * snr_s^2, rtol=1e-3) "log L(s|s) ≉ 1/2 SNR(s)^2"
     @assert isapprox(ll_hh, 1/2 * snr_h^2, rtol=1e-3) "log L(h|h) ≉ 1/2 SNR(h)^2"
