@@ -31,8 +31,15 @@ function f_b(m₁, m₂, γₛ)
     α₂ = 0.4511442198433961
     ρ  = -0.49709119294335674
     γᵣ = 1.4395688575650551
-
     return β * (m₁ / (1e3 * MSun))^(-α₁) * (m₂ / MSun)^α₂ * (1 + ρ * log(γₛ / γᵣ))
+
+    # # Old parametrization
+    # α₁ = 1.39191077
+    # α₂ = 0.443089063
+    # β = 7.03764788e3
+    # κ = -2.44956668
+    # δ = 0.839699908
+    # return β * (m₂ / MSun)^α₂ / (m₁ / MSun)^α₁ * (1 + κ * log10(γₛ) + δ)
 end
 
 # Different density profile parametrization
@@ -227,10 +234,21 @@ Base.convert(::Type{Array{T,1}}, sd::StaticDress{T}) where T <: Real = [sd.γₛ
 Base.convert(::Type{Array{T,1}}, dd::DynamicDress{T}) where T <: Real = [dd.γₛ, dd.c_f, dd.ℳ, dd.q, dd.Φ_c, dd.t̃_c, dd.dₗ_ι]
 Base.convert(::Type{Array{T,1}}, hp::HypParams{T}) where T <: Real = [hp.ψᵥ, hp.ϑ, hp.λ, hp.η, hp.fₜ]
 
+# Array -> Binary
+function Base.convert(::Type{B}, arr::Array{T,1}) where B <: Binary{T} where T <: Real
+    @assert length(arr) == length(fieldnames(B))
+    return B(arr...)
+end
+
 # DynamicDress -> StaticDress
 Base.convert(
     ::Type{StaticDress{T}}, dd::DynamicDress{T}
 ) where T <: Real = StaticDress{T}(dd.γₛ, dd.c_f, ℳ(dd), dd.Φ_c, dd.t̃_c, dd.dₗ_ι)
+
+# DynamicDress -> VacuumBinary
+Base.convert(
+    ::Type{VacuumBinary{T}}, dd::DynamicDress{T}
+) where T <: Real = VacuumBinary{T}(ℳ(dd), dd.Φ_c, dd.t̃_c, dd.dₗ_ι)
 
 # StaticDress -> HypParams
 function Base.convert(::Type{HypParams{T}}, sd::StaticDress{T}) where T <: Real
