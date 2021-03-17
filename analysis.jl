@@ -1,9 +1,11 @@
-using Zygote  # slow
+# using Zygote  # slow
 using ForwardDiff
 using LinearAlgebra: eigvals, Diagonal
 using QuadGK
 using Base
 using StaticArrays
+
+include("utils.jl")
 
 # Factors for rescaling some parameter derivatives to relative ones (d/dx d/dlog(x))
 # TODO: automate with `intrinsics`?
@@ -83,7 +85,7 @@ using LinearAlgebra
 # These take fc so they can work with VacuumBinary and StaticDress as well as
 # DynamicDress.
 
-function calculate_SNR(system, fₗ, fₕ, fc; N_nodes=10000, USE_GAUSS=true)
+function calculate_SNR(system, fₗ, fₕ, fc; N_nodes=1000, USE_GAUSS=true, LOG_SPACE=true)
     fh = min(fₕ, fc)
 
     modh_integrand(f) = 4 * amp₊(f, system)^2 / Sₙ_LISA(f)
@@ -91,24 +93,34 @@ function calculate_SNR(system, fₗ, fₕ, fc; N_nodes=10000, USE_GAUSS=true)
     #Use fixed Gauss quadrature, or Trapz
     if USE_GAUSS
         nodes, weights = gausslegendre(N_nodes)
-        f̄ = (fh + fₗ)/2
-        Δf = (fh - fₗ)
-        fs = f̄ .+ nodes * Δf / 2
-        modh = (Δf / 2 * dot(weights, modh_integrand.(fs)))
+
+        if LOG_SPACE
+            log_fₗ = log(fₗ)
+            log_fh = log(fh)
+            log_f̄ = (log_fh + log_fₗ)/2
+            log_Δf = log_fh - log_fₗ
+            log_f_vals = log_f̄ .+ nodes * log_Δf / 2
+            f_vals = exp.(log_f_vals)
+            modh = log_Δf/2 * dot(weights, modh_integrand.(f_vals) .* f_vals)
+        else
+            f̄ = (fh + fₗ)/2
+            Δf = fh - fₗ
+            f_vals = f̄ .+ nodes * Δf / 2
+            modh = (Δf / 2 * dot(weights, modh_integrand.(f_vals)))
+        end
     else  # trapz
-        fs = range(fₗ, fh, length=N_nodes)
-        modh = trapz(fs, modh_integrand.(fs))
+        f_vals = LOG_SPACE ? geomspace(fₗ, fh, N_nodes) : range(fₗ, fh, length=N_nodes)
+        modh = trapz(f_vals, modh_integrand.(f_vals))
     end
 
     return sqrt(modh)
 end
 
-function calculate_match_unnorm(system_1, system_2, fₗ, fₕ, fc_1, fc_2; N_nodes, USE_GAUSS)
+function calculate_match_unnorm(
+    system_1, system_2, fₗ, fₕ, fc_1, fc_2; N_nodes=15000, USE_GAUSS=true, LOG_SPACE=true
+)
     # Cut integral off at ISCO of first system to merge
     fh = min(fₕ, fc_1, fc_2)
-
-    f̄ = (fh + fₗ)/2
-    Δf = (fh - fₗ)
 
     # TODO: should it be fc_1 or fc_2 here?
     calcΔΨ(f) = Ψ(f, fc_1, system_1) - Ψ(f, fc_2, system_2)
@@ -116,9 +128,21 @@ function calculate_match_unnorm(system_1, system_2, fₗ, fₕ, fc_1, fc_2; N_no
 
     if USE_GAUSS
         nodes, weights = gausslegendre(N_nodes)
-        f_vals = f̄ .+ nodes * Δf / 2
+
+        if LOG_SPACE
+            log_fₗ = log(fₗ)
+            log_fh = log(fh)
+            log_f̄ = (log_fh + log_fₗ)/2
+            log_Δf = log_fh - log_fₗ
+            log_f_vals = log_f̄ .+ nodes * log_Δf / 2
+            f_vals = exp.(log_f_vals)
+        else
+            f̄ = (fh + fₗ)/2
+            Δf = fh - fₗ
+            f_vals = f̄ .+ nodes * Δf / 2
+        end
     else
-        f_vals = range(fₗ, fh, length=N_nodes)
+        f_vals = LOG_SPACE ? geomspace(fₗ, fh, N_nodes) : range(fₗ, fh, length=N_nodes)
     end
 
     ΔΨ = calcΔΨ.(f_vals)
@@ -127,8 +151,13 @@ function calculate_match_unnorm(system_1, system_2, fₗ, fₕ, fc_1, fc_2; N_no
     integs_im = sin.(ΔΨ) .* Amp
 
     if USE_GAUSS
-        x_re = (Δf/2 * dot(weights,  integs_re))
-        x_im = (Δf/2 * dot(weights,  integs_im))
+        if LOG_SPACE
+            x_re = log_Δf/2 * dot(weights, integs_re .* f_vals)
+            x_im = log_Δf/2 * dot(weights, integs_im .* f_vals)
+        else
+            x_re = Δf/2 * dot(weights, integs_re)
+            x_im = Δf/2 * dot(weights, integs_im)
+        end
     else
         x_re = trapz(f_vals, integs_re)
         x_im = trapz(f_vals, integs_im)
@@ -139,13 +168,15 @@ end
 
 function calculate_loglike(
     system_h, system_d, fₗ, fₕ, fc_h, fc_d;
-    optimize_dₗ_ι=true, optimize_Φ_c=true, N_nodes=1000, USE_GAUSS=true
+    optimize_dₗ_ι=true, optimize_Φ_c=true, N_nodes=1000, USE_GAUSS=true, LOG_SPACE=true
 )
     # Calculate real and imaginary parts of the overlap <d|h>
-    dh_re, dh_im = calculate_match_unnorm(system_d, system_h, fₗ, fₕ, fc_d, fc_h; N_nodes, USE_GAUSS)
+    dh_re, dh_im = calculate_match_unnorm(
+        system_d, system_h, fₗ, fₕ, fc_d, fc_h; N_nodes, USE_GAUSS, LOG_SPACE
+    )
 
     # Calculate the overlap <h|h>
-    hh = calculate_SNR(system_h, fₗ, fₕ, fc_h; N_nodes, USE_GAUSS)^2
+    hh = calculate_SNR(system_h, fₗ, fₕ, fc_h; N_nodes, USE_GAUSS, LOG_SPACE)^2
     
     # Optimise over phase at coalescence and dₗ_ι
     dh = optimize_Φ_c ? sqrt(dh_re^2 + dh_im^2) : dh_re

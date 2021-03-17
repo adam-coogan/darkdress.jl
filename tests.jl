@@ -40,7 +40,7 @@ Expected output:
 
 Accurately evaluating the last likelihood requires ~100000 points.
 """
-function test_calcloglike(N_nodes=100000)
+function test_calcloglike(N_nodes=100000, USE_GAUSS=true, LOG_SPACE=true)
     dd_s = DynamicDress(
         2.3333333333333335, 0.00018806659428775589, 3.151009407916561e31, 0.001, 0.0, 0.0, -56.3888135025341
     )
@@ -54,9 +54,9 @@ function test_calcloglike(N_nodes=100000)
     
     snr_s = calculate_SNR(dd_s, fₗ, fc_s, fc_s)
     snr_h = calculate_SNR(dd_s, fₗ, fc_h, fc_h)
-    ll_ss = calculate_loglike(dd_s, dd_s, fₗ, fc_s, fc_s, fc_s; N_nodes)
-    ll_hh = calculate_loglike(dd_h, dd_h, fₗ, fc_h, fc_h, fc_h; N_nodes)
-    ll_hs = calculate_loglike(dd_h, dd_s, fₗ, fₕ, fc_h, fc_s; N_nodes)
+    ll_ss = calculate_loglike(dd_s, dd_s, fₗ, fc_s, fc_s, fc_s; N_nodes, USE_GAUSS, LOG_SPACE)
+    ll_hh = calculate_loglike(dd_h, dd_h, fₗ, fc_h, fc_h, fc_h; N_nodes, USE_GAUSS, LOG_SPACE)
+    ll_hs = calculate_loglike(dd_h, dd_s, fₗ, fₕ, fc_h, fc_s; N_nodes, USE_GAUSS, LOG_SPACE)
 
     @assert isapprox(ll_ss, 1/2 * snr_s^2, rtol=1e-3) "log L(s|s) ≉ 1/2 SNR(s)^2"
     @assert isapprox(ll_hh, 1/2 * snr_h^2, rtol=1e-3) "log L(h|h) ≉ 1/2 SNR(h)^2"
@@ -69,10 +69,6 @@ function test_calcloglike(N_nodes=100000)
 end
 
 # %%
-"""
-No type annotations, non-constant globals: ~0.04 s/it
-Type annotations, constant globals: ~0.02 s/it
-"""
 function benchmark_fim()
     sd = StaticDress(
         2.3333333333333335, 0.00018806659428775589, 3.151009407916561e31, 0.0, 0.0, -56.3888135025341
@@ -97,11 +93,7 @@ function benchmark_fim()
 end
 
 # %%
-"""
-No type annotations, non-constant globals: ~0.1 s/it
-Type annotations, constant globals: ~0.02 s/it
-"""
-function benchmark_calcloglike(N_nodes=10000)
+function benchmark_calcloglike(N_nodes=10000, USE_GAUSS=true, LOG_SPACE=true)
     dd_s = DynamicDress(
         2.3333333333333335, 0.00018806659428775589, 3.151009407916561e31, 0.001, 0.0, 0.0, -56.3888135025341
     )
@@ -116,9 +108,9 @@ function benchmark_calcloglike(N_nodes=10000)
         println(
             @time(
                 begin
-                    calculate_loglike(dd_s, dd_s, fₗ, fc_s, fc_s, fc_s; N_nodes)
-                    calculate_loglike(dd_h, dd_h, fₗ, fc_h, fc_h, fc_h; N_nodes)
-                    calculate_loglike(dd_h, dd_s, fₗ, fc_s, fc_h, fc_s; N_nodes)
+                    calculate_loglike(dd_s, dd_s, fₗ, fc_s, fc_s, fc_s; N_nodes, USE_GAUSS, LOG_SPACE)
+                    calculate_loglike(dd_h, dd_h, fₗ, fc_h, fc_h, fc_h; N_nodes, USE_GAUSS, LOG_SPACE)
+                    calculate_loglike(dd_h, dd_s, fₗ, fc_s, fc_h, fc_s; N_nodes, USE_GAUSS, LOG_SPACE)
                     ""
                 end
             )
