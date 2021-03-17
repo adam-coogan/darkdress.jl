@@ -101,7 +101,7 @@ end
 No type annotations, non-constant globals: ~0.1 s/it
 Type annotations, constant globals: ~0.02 s/it
 """
-function benchmark_calcloglike()
+function benchmark_calcloglike(N_nodes=10000)
     dd_s = DynamicDress(
         2.3333333333333335, 0.00018806659428775589, 3.151009407916561e31, 0.001, 0.0, 0.0, -56.3888135025341
     )
@@ -116,9 +116,9 @@ function benchmark_calcloglike()
         println(
             @time(
                 begin
-                    calculate_loglike(dd_s, dd_s, fₗ, fc_s, fc_s, fc_s)
-                    calculate_loglike(dd_h, dd_h, fₗ, fc_h, fc_h, fc_h)
-                    calculate_loglike(dd_h, dd_s, fₗ, fc_s, fc_h, fc_s)
+                    calculate_loglike(dd_s, dd_s, fₗ, fc_s, fc_s, fc_s; N_nodes)
+                    calculate_loglike(dd_h, dd_h, fₗ, fc_h, fc_h, fc_h; N_nodes)
+                    calculate_loglike(dd_h, dd_s, fₗ, fc_s, fc_h, fc_s; N_nodes)
                     ""
                 end
             )
