@@ -142,7 +142,7 @@ function calculate_loglike(
     optimize_dₗ_ι=true, optimize_Φ_c=true, N_nodes=1000, USE_GAUSS=true
 )
     # Calculate real and imaginary parts of the overlap <d|h>
-    dh_re, dh_im = calculate_match_unnorm(system_d, system_h, fₗ, fₕ, fc_h, fc_d; N_nodes, USE_GAUSS)
+    dh_re, dh_im = calculate_match_unnorm(system_d, system_h, fₗ, fₕ, fc_d, fc_h; N_nodes, USE_GAUSS)
 
     # Calculate the overlap <h|h>
     hh = calculate_SNR(system_h, fₗ, fₕ, fc_h; N_nodes, USE_GAUSS)^2
