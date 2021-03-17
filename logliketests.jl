@@ -29,7 +29,7 @@ const system_s = get_system_s()
 """
 Samples a dark dress `h` with parameters near the given one `s`.
 """
-function sample_dd(system_s, method="uniform")
+function sample_dd(system_s, method="uniform", fim_cov_rescaling=0.01)
     if method == "uniform"
         # Estimated from Bradley's MCMC run
         r_γₛ = 0.02
@@ -53,7 +53,7 @@ function sample_dd(system_s, method="uniform")
         fc_s = f_isco(m₁(system_s.ℳ, system_s.q))
         fₗ = f_of_t_to_c(5 * yr, fc_s, system_s)
         Σ = inv(fim(fₗ, fc_s, fc_s, system_s)[idxs, idxs])
-        Σ = 1/2 * (Σ + Σ') * 0.01
+        Σ = 1/2 * (Σ + Σ') * fim_cov_rescaling
 
         # Enforce positivity
         while true
@@ -105,7 +105,7 @@ function plot_sample_loglikes()
     PyPlot.loglog(N_nodess, loglikes)
     PyPlot.xlabel("Number of nodes")
     PyPlot.ylabel("Log L(h|s)")
-    PyPlot.title("s: Eda+ system. h: samples from FIM.")
+    PyPlot.title("s: Eda+ system. h: samples from 0.01 * FIM.")
     PyPlot.display(PyPlot.gcf())
 end
 
