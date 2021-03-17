@@ -42,7 +42,7 @@ function mark_benchmarks(ax, m₁, m₂)
     ax.scatter(ρₛ_pbh, 9/4, marker="*", color="r", edgecolor="k", lw=0.5, s=100)
 end
 
-function plot_snr(T::Type{DT}, m₁, m₂, ρₛs, γₛs, fₕ, f_c, t_to_merger) where DT <: Binary
+function plot_snr(T::Type{DT}, m₁, m₂, ρₛs, γₛs, fₕ, f_c, t_to_merger) where DT
     n_ρₛ = length(ρₛs)
     n_γₛ = length(γₛs)
     snrs = zeros(n_γₛ, n_ρₛ)
@@ -70,7 +70,7 @@ function plot_snr(T::Type{DT}, m₁, m₂, ρₛs, γₛs, fₕ, f_c, t_to_merge
     return fig
 end
 
-function plot_ΔN_cycles(T::Type{DT}, m₁, m₂, ρₛs, γₛs, f_c, t_to_merger) where DT <: Binary
+function plot_ΔN_cycles(T::Type{DT}, m₁, m₂, ρₛs, γₛs, f_c, t_to_merger) where DT
     n_ρₛ = length(ρₛs)
     n_γₛ = length(γₛs)
     ΔN_cycless = zeros(n_γₛ, n_ρₛ)
@@ -114,7 +114,7 @@ function plot_ΔN_cycles(T::Type{DT}, m₁, m₂, ρₛs, γₛs, f_c, t_to_merg
     return fig
 end
 
-function plot_errs(T::Type{DT}, m₁, m₂, ρₛs, γₛs, fₕ, f_c, t_to_merger) where DT <: Binary
+function plot_errs(T::Type{DT}, m₁, m₂, ρₛs, γₛs, fₕ, f_c, t_to_merger) where DT
     n_ρₛ = length(ρₛs)
     n_γₛ = length(γₛs)
     n_intrinsic = length(intrinsics(T))

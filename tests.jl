@@ -55,3 +55,61 @@ function test_calcloglike()
     println("log L(h|h) = $(ll_hh)")
     println("log L(h|s) = $(ll_hs)")
 end
+
+# %%
+"""
+No type annotations, non-constant globals: ~0.04 s/it
+Type annotations, constant globals: ~0.02 s/it
+"""
+function benchmark_fim()
+    sd = StaticDress(
+        2.3333333333333335, 0.00018806659428775589, 3.151009407916561e31, 0.0, 0.0, -56.3888135025341
+    )
+    dd = DynamicDress(
+        2.3333333333333335, 0.00018806659428775589, 3.151009407916561e31, 0.001, 0.0, 0.0, -56.3888135025341
+    )
+    fₗ = 0.022607529999065474
+    fc = f_isco(m₁(dd.ℳ, dd.q))
+
+    for i in 1:10
+        println(
+            @time(
+                begin
+                    fim_errs(fₗ, fc, fc, sd)
+                    fim_errs(fₗ, fc, fc, dd)
+                    ""
+                end
+            )
+        )
+    end
+end
+
+# %%
+"""
+No type annotations, non-constant globals: ~0.1 s/it
+Type annotations, constant globals: ~0.02 s/it
+"""
+function benchmark_calcloglike()
+    dd_s = DynamicDress(
+        2.3333333333333335, 0.00018806659428775589, 3.151009407916561e31, 0.001, 0.0, 0.0, -56.3888135025341
+    )
+    dd_h = DynamicDress(
+        2.27843666, 7.38694332e-5, 3.1518396596159997e31, 0.000645246955, 0.0, -1.98186232e+02, -56.3888135025341
+    )
+    fₗ = 0.022607529999065474
+    fc_s = f_isco(m₁(dd_s.ℳ, dd_s.q))
+    fc_h = f_isco(m₁(dd_h.ℳ, dd_h.q))
+
+    for i in 1:5
+        println(
+            @time(
+                begin
+                    calculate_loglike(dd_s, dd_s, fₗ, fc_s, fc_s, fc_s)
+                    calculate_loglike(dd_h, dd_h, fₗ, fc_h, fc_h, fc_h)
+                    calculate_loglike(dd_h, dd_s, fₗ, fc_s, fc_h, fc_s)
+                    ""
+                end
+            )
+        )
+    end
+end

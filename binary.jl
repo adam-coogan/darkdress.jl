@@ -1,4 +1,4 @@
-import Base: values, collect, length
+import Base: length
 using HypergeometricFunctions: _₂F₁
 using SpecialFunctions: beta_inc
 using Roots
@@ -13,91 +13,6 @@ rₛ(m₁, ρₛ, γₛ) = ((3 - γₛ) * 0.2^(3 - γₛ) * m₁ / (2 * π * ρ�
 ψᵥ(m₁, m₂) = 1/16 * (c^3 / (π * Gₙ * ℳ(m₁, m₂)))^(5/3)
 ξ(γₛ) = beta_inc(γₛ - 1/2, 3/2, 1/2)[2]
 
-# Different density profile parametrization
-function ρ₁_to_ρₛ(m₁, ρ₁, γₛ, r_ref)
-    m̃₁ = (3 - γₛ) * 0.2^(3 - γₛ) * m₁ / (2 * π)
-    return (ρ₁ * r_ref^γₛ / m̃₁^(γₛ / 3))^(1 / (1 - γₛ / 3))
-end
-
-# Parent type for all binaries
-abstract type Binary end
-
-# Can be represented in the hypergeometric parametrization
-abstract type HypableDress <: Binary end
-
-# General functions
-ψᵥ(system::T) where T <: Binary = 1/16 * (c^3 / (π * Gₙ * ℳ(system)))^(5/3)
-values(system::T) where T <: Binary = (fn -> getfield(system, fn)).(fieldnames(T))
-collect(system::T) where T <: Binary = values(system)
-length(system::T) where T <: Binary = length(values(system))
-
-"""
-Frequency at time t [s] before coalescence at frequency f_c [Hz], [Hz].
-"""
-function f_of_t_to_c(t, f_c, system::T) where T <: Binary
-    return find_zero(f -> t_to_c(f, f_c, system) - t, (0.001 * f_c, f_c))
-end
-
-# Phase functions
-Φ̃(f, f_c, system::T) where T <: Binary = 2 * π * f * t_to_c(f, f_c, system) - Φ_to_c(f, f_c, system)
-Ψ(f, f_c, system::T) where T <: Binary = 2 * π * f * system.t̃_c - system.Φ_c - π/4 - Φ̃(f, f_c, system)
-
-# Amplitude functions
-function amp₊(f, system::T) where T <: Binary
-    h₀ = 1/2 * 4 * π^(2/3) * (Gₙ * ℳ(system))^(5/3) * f^(2/3) / c^4 * √(2 * π / d²Φ_dt²(f, system))
-    return h₀ * exp(system.dₗ_ι)
-end
-
-"""
-Vacuum binary
-"""
-# mutable
-struct VacuumBinary <: Binary
-    ℳ
-    Φ_c
-    t̃_c
-    dₗ_ι
-end
-
-# Getters
-ℳ(vb::VacuumBinary) = vb.ℳ
-
-# Factory
-function make_vacuum_binary(m₁, m₂, dₗ=1e8*pc, ι=0.0, Φ_c=0.0, t_c=0.0)
-    @assert m₁ > m₂
-    @assert m₂ > 0
-    t̃_c = t_c + dₗ / c
-    dₗ_ι = log((1 + cos(ι)^2) / (2 * dₗ))
-    return VacuumBinary(ℳ(m₁, m₂), Φ_c, t̃_c, dₗ_ι)
-end
-
-# Waveform functions
-Φ_to_c_indef(f, vb::VacuumBinary) = ψᵥ(vb) / f^(5/3)
-Φ_to_c(f, f_c, vb::VacuumBinary) = Φ_to_c_indef(f, vb) - Φ_to_c_indef(f_c, vb)
-
-t_to_c_indef(f, vb::VacuumBinary) = 5 * ψᵥ(vb) / (16 * π * f^(8/3))
-t_to_c(f, f_c, vb::VacuumBinary) = t_to_c_indef(f, vb) - t_to_c_indef(f_c, vb)
-
-d²Φ_dt²(f, vb::VacuumBinary) = 12 * π^2 * f^(11/3) / (5 * ψᵥ(vb))
-
-"""
-Static dress
-"""
-# mutable
-struct StaticDress <: HypableDress
-    γₛ
-    c_f
-    ℳ
-    Φ_c
-    t̃_c
-    dₗ_ι
-end
-
-# Getters
-# c_f(sd::StaticDress) = sd.c_f
-ℳ(sd::StaticDress) = sd.ℳ
-q(sd::StaticDress) = sd.q
-
 function c_f(m₁, m₂, ρₛ, γₛ)
     Λ = √(m₁ / m₂)
     M = m₁ + m₂
@@ -106,35 +21,10 @@ function c_f(m₁, m₂, ρₛ, γₛ)
     return c_df / c_gw * (Gₙ * M / π^2)^((11 - 2 * γₛ) / 6)
 end
 
-# StaticDress factories
-function make_dress(::Type{StaticDress}, m₁, m₂, ρₛ, γₛ, dₗ=1e8*pc, ι=0.0, Φ_c=0.0, t_c=0.0)
-    @assert m₁ > m₂
-    @assert m₂ > 0
-    t̃_c = t_c + dₗ / c
-    dₗ_ι = log((1 + cos(ι)^2) / (2 * dₗ))
-    return StaticDress(γₛ, c_f(m₁, m₂, ρₛ, γₛ), ℳ(m₁, m₂), Φ_c, t̃_c, dₗ_ι)
-end
-
-function make_dress(::Type{StaticDress}, values::AbstractArray)
-    @assert size(values) == size(StaticDress)
-    return StaticDress(values...)
-end
-
 """
-Dynamic dress
+Dynamic dress break frequency. Fit using HaloFeedback data from 5 years before
+merger.
 """
-# mutable
-struct DynamicDress <: HypableDress
-    γₛ
-    c_f
-    ℳ
-    q
-    Φ_c
-    t̃_c
-    dₗ_ι
-end
-
-# Fit using HaloFeedback data from 5 years before merger
 function f_b(m₁, m₂, γₛ)
     β  = 0.8162599280541165
     α₁ = 1.441237217113085
@@ -145,59 +35,116 @@ function f_b(m₁, m₂, γₛ)
     return β * (m₁ / (1e3 * MSun))^(-α₁) * (m₂ / MSun)^α₂ * (1 + ρ * log(γₛ / γᵣ))
 end
 
-# Getters
-# c_f(dd::DynamicDress) = dd.c_f
-ℳ(dd::DynamicDress) = dd.ℳ
-q(dd::DynamicDress) = dd.q
-m₁(dd::DynamicDress) = m₁(dd.ℳ, dd.q)
-m₂(dd::DynamicDress) = m₂(dd.ℳ, dd.q)
-
-# Converters
-# DynamicDress -> StaticDress
-Base.convert(::Type{StaticDress}, dd::DynamicDress) = StaticDress(dd.γₛ, dd.c_f, ℳ(dd), dd.Φ_c, dd.t̃_c, dd.dₗ_ι)
-
-# DynamicDress factory
-function make_dress(::Type{DynamicDress}, m₁, m₂, ρₛ, γₛ, dₗ=1e8*pc, ι=0.0, Φ_c=0.0, t_c=0.0)
-    sd = make_dress(StaticDress, m₁, m₂, ρₛ, γₛ, dₗ, ι, Φ_c, t_c)
-    DynamicDress(sd.γₛ, sd.c_f, ℳ(sd), m₂ / m₁, sd.Φ_c, sd.t̃_c, sd.dₗ_ι)
+# Different density profile parametrization
+function ρ₁_to_ρₛ(m₁, ρ₁, γₛ, r_ref)
+    m̃₁ = (3 - γₛ) * 0.2^(3 - γₛ) * m₁ / (2 * π)
+    return (ρ₁ * r_ref^γₛ / m̃₁^(γₛ / 3))^(1 / (1 - γₛ / 3))
 end
+
+# Parent type for all binaries
+abstract type Binary{T <: Real} end
+
+# Can be represented in the hypergeometric parametrization
+abstract type HypableDress{T <: Real} <: Binary{T} end
+
+"""
+Vacuum binary
+"""
+struct VacuumBinary{T} <: Binary{T}
+    ℳ::T
+    Φ_c::T
+    t̃_c::T
+    dₗ_ι::T
+end
+
+"""
+Static dress
+"""
+struct StaticDress{T} <: HypableDress{T}
+    γₛ::T
+    c_f::T
+    ℳ::T
+    Φ_c::T
+    t̃_c::T
+    dₗ_ι::T
+end
+
+"""
+Dynamic dress
+"""
+struct DynamicDress{T} <: HypableDress{T}
+    γₛ::T
+    c_f::T
+    ℳ::T
+    q::T
+    Φ_c::T
+    t̃_c::T
+    dₗ_ι::T
+end
+
+"""
+Hypergeometric waveform parametrization
+"""
+struct HypParams{T <: Real}
+    ψᵥ::T
+    ϑ::T
+    λ::T
+    η::T
+    fₜ::T
+end
+
+"""
+General functions
+"""
+ψᵥ(system::B) where B <: Binary = 1/16 * (c^3 / (π * Gₙ * ℳ(system)))^(5/3)
+length(::B) where B <: Binary = length(fieldnames(B))
 
 # Intrinsic binary parameters
 intrinsics(::Type{StaticDress}) = (:γₛ, :c_f, :ℳ)
 intrinsics(::Type{DynamicDress}) = (:γₛ, :c_f, :ℳ, :q)
 
+# Frequency at time t [s] before coalescence at frequency f_c [Hz], [Hz].
+function f_of_t_to_c(t, f_c, system::B) where B <: Binary
+    return find_zero(f -> t_to_c(f, f_c, system) - t, (0.0001 * f_c, f_c))
+end
+
 """
-Hypergeometric waveform parametrization
+Phase functions. Every `Binary` type must implement `Φ_to_c_indef`,
+`t_to_c_indef` and `d²Φ_dt²`.
 """
-# mutable
-struct HypParams
-    ψᵥ
-    ϑ
-    λ
-    η
-    fₜ
+Φ_to_c(f, f_c, system::B) where B <: Binary = Φ_to_c_indef(f, system) - Φ_to_c_indef(f_c, system)
+t_to_c(f, f_c, system::B) where B <: Binary = t_to_c_indef(f, system) - t_to_c_indef(f_c, system)
+
+# If possible, convert system to HypParams
+Φ_to_c_indef(f, system::B) where B <: HypableDress{T} where T <: Real = Φ_to_c_indef(f, convert(HypParams{T}, system))
+t_to_c_indef(f, system::B) where B <: HypableDress{T} where T <: Real = t_to_c_indef(f, convert(HypParams{T}, system))
+d²Φ_dt²(f, system::B) where B <: HypableDress{T} where T <: Real = d²Φ_dt²(f, convert(HypParams{T}, system))
+
+# Phase of Fourier transform of waveform in stationary phase approximation
+Φ̃(f, f_c, system::B) where B <: Binary = 2 * π * f * t_to_c(f, f_c, system) - Φ_to_c(f, f_c, system)
+Ψ(f, f_c, system::B) where B <: Binary = 2 * π * f * system.t̃_c - system.Φ_c - π/4 - Φ̃(f, f_c, system)
+
+# Amplitude functions
+function amp₊(f, system::B) where B <: Binary
+    h₀ = 1/2 * 4 * π^(2/3) * (Gₙ * ℳ(system))^(5/3) * f^(2/3) / c^4 * √(2 * π / d²Φ_dt²(f, system))
+    return h₀ * exp(system.dₗ_ι)
 end
 
-# StaticDress -> HypParams
-function Base.convert(::Type{HypParams}, sd::StaticDress)
-    ϑ = 5 / (11 - 2 * sd.γₛ)
-    fₜ = sd.c_f^(3 / (11 - 2 * sd.γₛ))
-    return HypParams(ψᵥ(sd), ϑ, 0., 1., fₜ)
-end
+"""
+Getters
+"""
+ℳ(system::B) where B <: Binary = system.ℳ
+q(dd::DynamicDress) = dd.q
+m₁(dd::DynamicDress) = m₁(dd.ℳ, dd.q)
+m₂(dd::DynamicDress) = m₂(dd.ℳ, dd.q)
 
-# DynamicDress -> HypParams
-function Base.convert(::Type{HypParams}, dd::DynamicDress)
-    f_eq = convert(HypParams, convert(StaticDress, dd)).fₜ  # StaticDress -> HypParams
-    # Compute new parameters
-    fₜ = f_b(m₁(dd), m₂(dd), dd.γₛ)
-    γₑ = 5/2  # TODO: CHANGE!
-    ϑ = 5 / (2 * γₑ)
-    λ = (11 - 2 * (dd.γₛ + γₑ)) / 3
-    η = (5 + 2 * γₑ) / (2 * (8 - dd.γₛ)) * (f_eq / fₜ)^((11 - 2 * dd.γₛ) / 3)
-    return HypParams(ψᵥ(dd), ϑ, λ, η, fₜ)
-end
+"""
+Phase functions
+"""
+Φ_to_c_indef(f, vb::VacuumBinary) = ψᵥ(vb) / f^(5/3)
+t_to_c_indef(f, vb::VacuumBinary) = 5 * ψᵥ(vb) / (16 * π * f^(8/3))
+d²Φ_dt²(f, system::VacuumBinary) = 12 * π^2 * f^(11/3) / (5 * ψᵥ(system))
 
-# Phase to coalescence plus constant
 function Φ_to_c_indef(f, hp::HypParams)
     x = f / hp.fₜ
     if hp.λ == 0 && hp.η == 1
@@ -209,7 +156,6 @@ function Φ_to_c_indef(f, hp::HypParams)
     end
 end
 
-# Time to coalescence plus constant
 function t_to_c_indef(f, hp::HypParams)
     x = f / hp.fₜ
     if hp.λ == 0 && hp.η == 1
@@ -234,19 +180,6 @@ function t_to_c_indef(f, hp::HypParams)
     end
 end
 
-"""
-Phase until coalescence at frequency f_c [Hz], [rad].
-"""
-Φ_to_c(f, f_c, hp::HypParams) = Φ_to_c_indef(f, hp) - Φ_to_c_indef(f_c, hp)
-
-"""
-Time until coalescence at frequency f_c [Hz], [s].
-"""
-t_to_c(f, f_c, hp::HypParams) = t_to_c_indef(f, hp) - t_to_c_indef(f_c, hp)
-
-"""
-Second time derivative of phase as a function of frequency [rad / s^2].
-"""
 function d²Φ_dt²(f, hp::HypParams)
     x = f / hp.fₜ
     if hp.λ == 0 && hp.η == 1
@@ -261,7 +194,59 @@ function d²Φ_dt²(f, hp::HypParams)
     end
 end
 
-# If possible, convert system to HypParams
-Φ_to_c(f, f_c, system::T) where T <: HypableDress = Φ_to_c(f, f_c, convert(HypParams, system))
-t_to_c(f, f_c, system::T) where T <: HypableDress = t_to_c(f, f_c, convert(HypParams,system))
-d²Φ_dt²(f, system::T) where T <: HypableDress = d²Φ_dt²(f, convert(HypParams,system))
+"""
+Factories
+"""
+function make_vacuum_binary(m₁, m₂, dₗ=1e8*pc, ι=0.0, Φ_c=0.0, t_c=0.0)
+    @assert m₁ > m₂
+    @assert m₂ > 0
+    t̃_c = t_c + dₗ / c
+    dₗ_ι = log((1 + cos(ι)^2) / (2 * dₗ))
+    return VacuumBinary(ℳ(m₁, m₂), Φ_c, t̃_c, dₗ_ι)
+end
+
+function make_dress(::Type{StaticDress}, m₁, m₂, ρₛ, γₛ, dₗ=1e8*pc, ι=0.0, Φ_c=0.0, t_c=0.0)
+    @assert m₁ > m₂
+    @assert m₂ > 0
+    t̃_c = t_c + dₗ / c
+    dₗ_ι = log((1 + cos(ι)^2) / (2 * dₗ))
+    return StaticDress(γₛ, c_f(m₁, m₂, ρₛ, γₛ), ℳ(m₁, m₂), Φ_c, t̃_c, dₗ_ι)
+end
+
+function make_dress(::Type{DynamicDress}, m₁, m₂, ρₛ, γₛ, dₗ=1e8*pc, ι=0.0, Φ_c=0.0, t_c=0.0)
+    sd = make_dress(StaticDress, m₁, m₂, ρₛ, γₛ, dₗ, ι, Φ_c, t_c)
+    return DynamicDress(sd.γₛ, sd.c_f, ℳ(sd), m₂ / m₁, sd.Φ_c, sd.t̃_c, sd.dₗ_ι)
+end
+
+"""
+Converters
+"""
+# Binary -> Array
+Base.convert(::Type{Array{T,1}}, vb::VacuumBinary{T}) where T <: Real = [vb.ℳ, vb.Φ_c, vb.t̃_c, vb.dₗ_ι]
+Base.convert(::Type{Array{T,1}}, sd::StaticDress{T}) where T <: Real = [sd.γₛ, sd.c_f, sd.ℳ, sd.Φ_c, sd.t̃_c, sd.dₗ_ι]
+Base.convert(::Type{Array{T,1}}, dd::DynamicDress{T}) where T <: Real = [dd.γₛ, dd.c_f, dd.ℳ, dd.q, dd.Φ_c, dd.t̃_c, dd.dₗ_ι]
+Base.convert(::Type{Array{T,1}}, hp::HypParams{T}) where T <: Real = [hp.ψᵥ, hp.ϑ, hp.λ, hp.η, hp.fₜ]
+
+# DynamicDress -> StaticDress
+Base.convert(
+    ::Type{StaticDress{T}}, dd::DynamicDress{T}
+) where T <: Real = StaticDress{T}(dd.γₛ, dd.c_f, ℳ(dd), dd.Φ_c, dd.t̃_c, dd.dₗ_ι)
+
+# StaticDress -> HypParams
+function Base.convert(::Type{HypParams{T}}, sd::StaticDress{T}) where T <: Real
+    ϑ = 5 / (11 - 2 * sd.γₛ)
+    fₜ = sd.c_f^(3 / (11 - 2 * sd.γₛ))
+    return HypParams{T}(ψᵥ(sd), ϑ, 0., 1., fₜ)
+end
+
+# DynamicDress -> HypParams
+function Base.convert(::Type{HypParams{T}}, dd::DynamicDress{T}) where T <: Real
+    f_eq = convert(HypParams{T}, convert(StaticDress{T}, dd)).fₜ  # StaticDress -> HypParams
+    # Compute new parameters
+    fₜ = f_b(m₁(dd), m₂(dd), dd.γₛ)
+    γₑ = 5/2  # TODO: CHANGE!
+    ϑ = 5 / (2 * γₑ)
+    λ = (11 - 2 * (dd.γₛ + γₑ)) / 3
+    η = (5 + 2 * γₑ) / (2 * (8 - dd.γₛ)) * (f_eq / fₜ)^((11 - 2 * dd.γₛ) / 3)
+    return HypParams{T}(ψᵥ(dd), ϑ, λ, η, fₜ)
+end

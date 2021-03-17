@@ -14,18 +14,24 @@ rescalings(system::Binary) = ones(length(system))  # fallback: don't use relativ
 """
 Numerator of integrand in Fisher information matrix.
 """
-function fim_integrand_num(f, f_c, system::T) where T <: Binary
+function fim_integrand_num(f, f_c, system::B) where B <: Binary
+    # Get higher-order constructor to make binaries where the type parameter is
+    # a dual number
+    Constructor = Base.typename(B).wrapper
+
     # Zygote returns `nothing` for parameters that don't have gradients. These must be
     # replaced with zeros. This is not the case for ForwardDiff.
     # ∂amp₊ = collect(values(gradient(s -> amp₊(f, s), system)[1]))  # zygote
-    ∂amp₊ = ForwardDiff.gradient(vals -> amp₊(f, T(vals...)), collect(values(system)))
+    ∂amp₊ = ForwardDiff.gradient(
+        vals -> amp₊(f, Constructor(vals...)), convert(Array{Float64,1}, system)
+    )
     ∂amp₊[∂amp₊ .=== nothing] .= 0.
-    ∂amp₊ = convert(Array{Float64}, ∂amp₊)
 
     # ∂Ψ = collect(values(gradient(s -> Ψ(f, f_c, s), system)[1]))  # zygote
-    ∂Ψ = ForwardDiff.gradient(vals -> Ψ(f, f_c, T(vals...)), collect(values(system)))
+    ∂Ψ = ForwardDiff.gradient(
+        vals -> Ψ(f, f_c, Constructor(vals...)), convert(Array{Float64,1}, system)
+    )
     ∂Ψ[∂Ψ .=== nothing] .= 0.
-    ∂Ψ = convert(Array{Float64}, ∂Ψ)
 
     # Convert to log derivatives for intrinsic parameters
     scales = rescalings(system)
@@ -38,7 +44,7 @@ end
 """
 Compute Fisher information matrix.
 """
-function fim(fₗ, fₕ, f_c, system::T) where T <: Binary
+function fim(fₗ, fₕ, f_c, system)
     integrand(f) = SMatrix{length(system), length(system), Float64}(
         fim_integrand_num(f, f_c, system) / Sₙ_LISA(f)
     )
@@ -50,7 +56,7 @@ end
 """
 Estimate covariance matrix from Fisher information matrix.
 """
-function fim_cov(fₗ, fₕ, f_c, system::T) where T <: Binary
+function fim_cov(fₗ, fₕ, f_c, system)  # where T <: Binary
     Γ = fim(fₗ, fₕ, f_c, system)
 
     # Improve stability of inversion
@@ -65,7 +71,7 @@ end
 """
 Estimate 1D uncertainties from Fisher information matrix.
 """
-function fim_errs(fₗ, fₕ, f_c, system::T) where T <: Binary
+function fim_errs(fₗ, fₕ, f_c, system)  # where T <: Binary
     Σ = fim_cov(fₗ, fₕ, f_c, system)
     return sqrt.([Σ[i, i] for i in 1:size(Σ)[1]])
 end

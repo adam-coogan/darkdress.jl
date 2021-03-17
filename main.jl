@@ -7,8 +7,12 @@ include("tests.jl")
 include("plotting.jl")
 
 # %%
-test_fim_SNR()
 test_calcloglike()
+benchmark_calcloglike()
+
+# %%
+test_fim_SNR()
+benchmark_fim()
 
 # %%
 """
@@ -18,8 +22,8 @@ function main()
     # Configure masses and parameter grids
     m₁_ref = 1.4e3 * MSun
     m₂_ref = 1.4 * MSun
-    ρₛs_ref = 10.0.^range(-2, log10(3e4), length=50) * MSun/pc^3
-    γₛs_ref = collect(range(2.2, 2.5, length=45))
+    ρₛs_ref = 10.0.^range(-2, log10(3e4), length=15) * MSun/pc^3
+    γₛs_ref = collect(range(2.2, 2.5, length=14))
     t_to_merger = 5 * yr  # observing time
     f_c = f_isco(m₁_ref)  # frequency at coalescence
     fₕ = f_c  # for setting frequency observation window
