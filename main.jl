@@ -7,8 +7,12 @@ include("tests.jl")
 include("plotting.jl")
 
 # %%
-test_fim_SNR()
 test_calcloglike()
+benchmark_calcloglike()
+
+# %%
+test_fim_SNR()
+benchmark_fim()
 
 # %%
 """

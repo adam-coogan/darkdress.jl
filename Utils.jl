@@ -1,10 +1,10 @@
 # Constants in SI units
 # For some reason the code gets EXTREMELY slow if these are const, which is confusing...
-Gₙ = 6.67408e-11  # m^3 s^-2 kg^-1
-c = 299792458.  # m/s
-MSun = 1.98855e30  # kg
-pc = 3.08567758149137e16 # m
-yr = 365.25 * 24 * 3600  # s
+const Gₙ = 6.67408e-11  # m^3 s^-2 kg^-1
+const c = 299792458.  # m/s
+const MSun = 1.98855e30  # kg
+const pc = 3.08567758149137e16 # m
+const yr = 365.25 * 24 * 3600  # s
 
 geomspace(x_start, x_end, n::Int=20) = [10^y for y in range(log10(x_start), log10(x_end), length=n)]
 
