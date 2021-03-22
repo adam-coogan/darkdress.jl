@@ -40,7 +40,7 @@ const f_c = f_isco(m₁_ref)  # frequency at coalescence
 const fₕ = f_c  # for setting frequency observation window
 
 
-function calculate_SNR(T, fₗ, fₕ, N_nodes=10000)
+function calculate_SNR_r(T, fₗ, fₕ, N_nodes=10000)
 
 
     fc_1 = f_isco(m₁(T.ℳ, T.q))
@@ -87,7 +87,7 @@ function calculate_SNR(T, fₗ, fₕ, N_nodes=10000)
     #Don't forget the factor of 4
 end
 
-function calculate_match_unnorm(T1, T2, fₗ, fₕ, N_nodes=10000)
+function calculate_match_unnorm_r(T1, T2, fₗ, fₕ, N_nodes=10000)
 
 
     fc_1 = f_isco(m₁(T1.ℳ, T1.q))
@@ -209,7 +209,7 @@ function calcloglike(dd, fₗ, fₕ, x, dim=7, N_nodes=1000, linear = false)
     dd_alt = DynamicDress(γₛ, c_f, ℳ, q, Φ_c, t̃_c, dₗ_ι)
  
     #Calculate real and imaginary parts of the overlap <d|h>
-    dh_re, dh_im = calculate_match_unnorm(dd, dd_alt, fₗ, fₕ, N_nodes)
+    dh_re, dh_im = calculate_match_unnorm_r(dd, dd_alt, fₗ, fₕ, N_nodes)
 
     #If we're optimising over the phase (dim < 7)
     #then take the real value
@@ -220,7 +220,7 @@ function calcloglike(dd, fₗ, fₕ, x, dim=7, N_nodes=1000, linear = false)
     end
 
     #Calculate the overlap <h|h>
-    hh = calculate_SNR(dd_alt, fₗ, fₕ, N_nodes)
+    hh = calculate_SNR_r(dd_alt, fₗ, fₕ, N_nodes)
 
     #Optimise over dₗ_ι if necessary
     r = 1.
@@ -235,27 +235,50 @@ end
 
 # %%
 """
-Expected output:
+Expected result:
 
     log L(s|s) = 42.32768093699036
     log L(h|h) = 42.35282361247973
     log L(h|s) = 5.606088315541141e-7
 """
-function test_calcloglike(N_nodes=100000)
+function test_calcloglike(N_nodes=10000)
     fₗ = 0.022607529999065474
     f_c = 4.397009835544328
     dd_ref = DynamicDress(2.3333333333333335, 0.00018806659428775589, 3.151009407916561e31, 0.001, 0.0, 0.0, -56.3888135025341)
-    dd_alt = DynamicDress(2.27843666, 7.38694332e-5, 3.1518396596159997e31, 0.000645246955, 0.0, -1.98186232e+02, -56.3888135025341)
+    #dd_alt = DynamicDress(2.27843666, 7.38694332e-5, 3.1518396596159997e31, 0.000645246955, 0.0, -198.186232, -56.3888135025341)
+    dd_alt = DynamicDress(exp(0.81637266), exp(-9.91926788),  exp(2.76308336)*MSun,  exp(-7.52114998), 0.0,  -227.74995698, -56.3888135025341)
+    
     x_ref = [dd_ref.γₛ, dd_ref.c_f, dd_ref.ℳ / MSun, dd_ref.q, dd_ref.t̃_c]
     x_alt = [dd_alt.γₛ, dd_alt.c_f, dd_alt.ℳ / MSun, dd_alt.q, dd_alt.t̃_c]
+    #-1.98186232e+02
     
+    #2.27843666e+00  7.38694332e-05  1.58499392e+01  6.45246955e-04
+    #-198.186232
+
+    println("runMCMC.jl:")
+
     ll_ss = calcloglike(dd_ref, fₗ, f_c, x_ref, 5, N_nodes, true)
     ll_hh = calcloglike(dd_alt, fₗ, f_c, x_alt, 5, N_nodes, true)
     ll_hs = calcloglike(dd_ref, fₗ, f_c, x_alt, 5, N_nodes, true) 
 
-    println("log L(s|s) = $(ll_ss)")
-    println("log L(h|h) = $(ll_hh)")
-    println("log L(h|s) = $(ll_hs)")
+    println("   log L(s|s) = $(ll_ss)")
+    println("   log L(h|h) = $(ll_hh)")
+    println("   log L(h|s) = $(ll_hs)")
+
+    println("")
+    println("analysis.jl:")
+
+    fc_ref = f_isco(m₁(dd_ref.ℳ, dd_ref.q))
+    fc_alt = f_isco(m₁(dd_alt.ℳ, dd_alt.q))
+
+    ll_ss = calculate_loglike(dd_ref, dd_ref, fₗ, f_c, fc_ref, fc_ref, N_nodes=N_nodes)
+    ll_hh = calculate_loglike(dd_alt, dd_alt, fₗ, f_c, fc_alt, fc_alt, N_nodes=N_nodes)
+    ll_hs = calculate_loglike(dd_ref, dd_alt, fₗ, f_c, fc_ref, fc_alt, N_nodes=N_nodes)
+
+
+    println("   log L(s|s) = $(ll_ss)")
+    println("   log L(h|h) = $(ll_hh)")
+    println("   log L(h|s) = $(ll_hs)")
 end
 
 test_calcloglike()
@@ -349,29 +372,26 @@ function test_1d(;N_samples=1000, output_label=nothing, temperature = 1.0)
     fig
 end
 
-#setprecision(200)
-
 function run_5d(;N_samples=1000, output_label=nothing)
 
     println("> Running with 5-dimensions...")
 
     dd = make_dress(DynamicDress, 1000.0 * MSun, 1.0*MSun, 226 * MSun/pc^3, 7.0/3.0, 1e8*pc, 0.0, 0.0, -1e8*pc/c)
     fₗ = f_of_t_to_c(5 * yr, f_c, dd)
-    #fₗ = 1e-2
-    #println("> WARNING: Using f_l = 1e-2 Hz...")
-    #println("> SNR^2 for benchmark system, <d|d>: ", calculate_SNR(dd, fₗ, fₕ, 1000))
 
     γₛ = 7.0/3.0
 
     #c0 = (dd.c_f/f_b(1000.0 * MSun, 1.0*MSun, γₛ))^((11-2*γₛ)/3)
-    #c0 = (dd.c_f)^((3 / (11 - 2 * dd.γₛ)))#/f_b(1000.0 * MSun, 1.0*MSun, γₛ)
-    #x_true_full = [(dd.γₛ), (dd.c_f), (dd.ℳ)/MSun, dd.q, dd.t̃_c]
-    x_true_full = [(dd.γₛ), dd.c_f, (dd.ℳ)/MSun, dd.q, dd.Φ_c, dd.t̃_c, dd.dₗ_ι]
+    #c0 = (dd.c_f)^((3 / (11 - 2 * dd.γₛ)))
+    x_true_full = [(dd.γₛ), dd.c_f, (dd.ℳ)/MSun, dd.q, dd.t̃_c]
+    #x_true_full = [(dd.γₛ), dd.c_f, (dd.ℳ)/MSun, dd.q, dd.Φ_c, dd.t̃_c, dd.dₗ_ι]
     #x_true_full = [log(dd.γₛ), log(dd.c_f), log((dd.ℳ)/MSun), log(dd.q), dd.Φ_c, dd.t̃_c, dd.dₗ_ι]
     #x_true_full = [log(dd.γₛ), log(dd.c_f), log((dd.ℳ)/MSun), log(dd.q), log(dd.t̃_c + 1e-10), dd.dₗ_ι]
 
     DIM = 5
     x_true = x_true_full[1:DIM]
+    x_true[1:4] = log.(x_true_full[1:4])
+    println(x_true)
 
     #x_true = [log(dd.γₛ), log(dd.c_f), log(dd.ℳ), log(dd.q), dd.t̃_c]
     #x_true = [(dd.γₛ), (dd.c_f), (dd.ℳ)/MSun, (dd.q), dd.t̃_c]
@@ -380,17 +400,18 @@ function run_5d(;N_samples=1000, output_label=nothing)
     #x_true = [(dd.ℳ)/MSun, dd.q]
 
 
-    
-    loglike(x) = calcloglike(dd, fₗ, fₕ, x, DIM, 200, true)
+    #loglike(x) = calcloglike(dd, fₗ, fₕ, x, 5, 1000, true)
+    loglike(x) = like_wrapper(x, dd, fₗ, fₕ)
+
     loglike_max = loglike(x_true)
     println("> x_true: ", x_true)
     println("> Maximum loglike/T: ", loglike_max)
 
-    x_test = [ 2.27843666e+00  7.38694332e-05  1.58499392e+01  6.45246955e-04 -1.98186232e+02]
-    L_test =  loglike(x_test)
-    println("TEST LIKELIHOOD: ", L_test)
+    #x_test = [ 2.27843666e+00  7.38694332e-05  1.58499392e+01  6.45246955e-04 -1.98186232e+02]
+    #L_test =  loglike(x_test)
+    #println("TEST LIKELIHOOD: ", L_test)
 
-    return x_test, L_test
+    #return x_test, L_test
 
     #loglike_sub(x) = calcloglike(dd, fₗ, fₕ, [x... x[5]], 5, 500, true)
 
@@ -415,14 +436,16 @@ function run_5d(;N_samples=1000, output_label=nothing)
     #FIM_bf = convert(Array{BigFloat,2}, FIM_new)
     #FIM_bf = BigFloat(FIM_new)
 
-    covmat = inv(FIM_new)
+    covmat = inv_stable(FIM_new)
 
-    FIM_pert = FIM_new .* (1 .+ 1e-6.*randn(length(x_true)))
-    covmat_pert = inv(FIM_pert)
+    #Rescale the whole thing by a different (5, 5) matrix...
+    #FIM_pert = FIM_new .* (1 .+ 1e-6.*randn(length(x_true)))
+    #covmat_pert = inv(FIM_pert)
 
-    println("Δcovmat/covmat:", (covmat .- covmat_pert)./covmat)
-    println(" ")
-
+    #println("Δcovmat/covmat:", (covmat .- covmat_pert)./covmat)
+    
+    #println("covmat:", covmat)
+    #println(" ")
     #covmat = inv(FIM_bf)
     #println("Σ Σ^-1 = ", covmat*FIM_bf)
     #println(" ")
@@ -443,9 +466,9 @@ function run_5d(;N_samples=1000, output_label=nothing)
     #covmat = covmat.*0.1
 
     #println("> Benchmark values: ", x_true)
-    #errors = sqrt.([errs_cov[i, i] for i in 1:size(errs_cov)[1]])
-    #println("> Errors: ", errors)
-
+    errors = sqrt.([covmat[i, i] for i in 1:size(covmat)[1]])
+    println("> Errors: ", errors)
+    #return 0
 
 
     #x_test = [ 0.85719845, -8.17143022, 71.52774677, -6.71501771, 43.93385739]
@@ -454,7 +477,7 @@ function run_5d(;N_samples=1000, output_label=nothing)
 
     #quit()
 
-    N_ini = 5000
+    N_ini = 2000
 
     x_ini = 1.0*x_true #.+ 1e-0.*(randn(length(x_true)).*errors)
         
@@ -471,15 +494,19 @@ function run_5d(;N_samples=1000, output_label=nothing)
 
     #covmat =  Diagonal(sqrt.([covmat[i, i] for i in 1:size(covmat)[1]]))
 
-    N_refine = 2
+    N_refine = 3
 
     for i_ref = 1:N_refine
         if (i_ref%2 == 0)
             #println("A")
-            scale_refine = 1.25
+            scale_refine = 2.0
         else
             #println("B")
-            scale_refine = 0.75
+            scale_refine = 0.5
+        end
+
+        if (i_ref == 3)
+            scale_refine = 1.0
         end
 
         scale_refine = 1.0
@@ -492,7 +519,7 @@ function run_5d(;N_samples=1000, output_label=nothing)
         logBL = logBL .- 0.5*log((2*π)^5*det(scale_refine*covmat))
         ΔlogL = full_chain[:,2] .- maximum(full_chain[:,2]) 
 
-        inds = ΔlogL .> -20
+        inds = ΔlogL .> -100
         #NEED TO BE CAREFUL - NEED TO CORRECT THE RESCALING FOR THE FACT THAT I"M NOT INCLUDING ALL!!!
 
         #chi2 ~ 2*DeltaLogL
@@ -519,7 +546,7 @@ function run_5d(;N_samples=1000, output_label=nothing)
         yvals = full_chain[:,4]
         s1 = ax.scatter(xvals[inds], yvals[inds], c=ΔlogL[inds])
         plt.colorbar(s1, ax=ax)
-        fig.savefig("/Users/bradkav/Code/darkdress.jl/figures/sample" * string(i_ref)* ".pdf")
+        fig.savefig("/Users/bradkav/Code/darkdress.jl/figures/sample" * string(i_ref)* "d.pdf")
         #covmat = covmat*((x_max)^2)/(covmat[1,1])
 
     end
@@ -530,7 +557,7 @@ function run_5d(;N_samples=1000, output_label=nothing)
     #return full_chain, covmat
 
     #scale = (2.38)^2/5
-    scale = 0.1
+    scale = 0.2
     #scale = 10
     #scale = 1
     full_chain = RunMCMC(loglike, x_ini, N_samples, 
@@ -538,7 +565,7 @@ function run_5d(;N_samples=1000, output_label=nothing)
                                             output_label = output_label,
                                             adjust_steps = 1000,
                                             verbose=true,
-                                            adapt_method="rescale")
+                                            adapt_method=nothing)
     #full_chain_new = RandomSample(loglike, x_ini, N_samples, scale*covmat_new, output_label=output_label, adjust_steps = 500000)
 
     #y = (full_chain_new[:,3:7] .- x_true')
@@ -554,11 +581,6 @@ function run_5d(;N_samples=1000, output_label=nothing)
     #return full_chain_new, covmat_new
 end
 
-
-#test_1d()
-
-#N_args = length(ARGS)
-
 #if (N_args == 1)
 #    fileID = ARGS[1]
 #else
@@ -572,16 +594,19 @@ dd = make_dress(DynamicDress, 1000.0 * MSun, 1.0*MSun, 226 * MSun/pc^3, 7.0/3.0,
 #writedlm("chains/chain_" * fileID * ".txt", chains, "   ")
 
 
-chain1, covmat1 = run_5d(;N_samples=100000, output_label="5d_temp")
+chain1, covmat1 = run_5d(;N_samples=10000, output_label="5d_final_5")
 #------------------------------
 
 
-fb = f_b(1000.0 * MSun, 1.0*MSun, 7.0/3.0)
+#fb = f_b(1000.0 * MSun, 1.0*MSun, 7.0/3.0)
 #c0 = dd.c_f/((f_b(1000.0 * MSun, 1.0*MSun, 7.0/3.0))^((11-2*7.0/3.0)/3))
 #c0 = dd.c_f/((f_b(1000.0 * MSun, 1.0*MSun, 7.0/3.0))^((11-2*7.0/3.0)/3))
 #x0 =  [log(dd.γₛ), log(dd.c_f), log(dd.ℳ/MSun), log(dd.q), dd.t̃_c]
-c0 = (dd.c_f)^((3 / (11 - 2 * dd.γₛ)))#/fb
-x0 =  [dd.γₛ, c0, dd.ℳ/MSun, dd.q, dd.t̃_c]
+#c0 = (dd.c_f)^((3 / (11 - 2 * dd.γₛ)))#/fb
+begin
+    x0 =  [dd.γₛ, dd.c_f, dd.ℳ/MSun, dd.q, dd.t̃_c]
+    x0[1:4] = log.(x0[1:4])
+end
 #x0 =  [dd.γₛ, dd.c_f, dd.ℳ/(MSun), dd.q, dd.t̃_c,  dd.dₗ_ι]
 #x0 =  [dd.γₛ, dd.c_f, dd.ℳ/(MSun)]
 #x0 =  [dd.γₛ, dd.c_f, dd.ℳ/(MSun), dd.q, dd.t̃_c,  dd.dₗ_ι]
@@ -697,14 +722,6 @@ end
 
 
 
-my_lims = [
-    (-0.025, 0.025),
-    (-0.5, 0.5),
-    (-0.0002, 0.0002),
-    (-0.2, 0.2),
-    (-150, 150)
-]
-
 lims_Adam = [
     (-0.02, 0.015),
     (-0.2, 0.2),
@@ -800,7 +817,7 @@ function my_corner(
 end
 
 
-labs = [L"\Delta\gamma_\mathrm{sp}/\gamma_\mathrm{sp}", L"\Delta \tilde{c}_f/\tilde{c}_f", L"\Delta \mathcal{M}/\mathcal{M}", L"\Delta q/q", L"\tilde{t}_c"]
+labs = [L"\Delta\gamma_\mathrm{sp}/\gamma_\mathrm{sp}", L"\Delta c_f/\tilde{c}_f", L"\Delta \mathcal{M}/\mathcal{M}", L"\Delta q/q", L"\tilde{t}_c"]
 
 #c_f_true = 0.00018806659428775589
 c_f_true = 0.017187007242570305
@@ -849,20 +866,33 @@ begin
 
 end
 
-#chains = readdlm("/Users/bradkav/Code/darkdress.jl/chains/chain_5d_sample_test5.txt")
+chains = readdlm("/Users/bradkav/Code/darkdress.jl/chains/chain_5d_final_full.txt")
+
+x0 =  [dd.γₛ, dd.c_f, dd.ℳ/MSun, dd.q, dd.t̃_c]
+x_denom = 0.0.*x0
+x_denom[1:4] = x0[1:4]
+x_denom[5] = 1.0
+
+my_lims = [
+    (-0.06, 0.06),
+    (-1.0, 2.0),
+    (-0.00025, 0.00025),
+    (-1.0, 1.5),
+    (-250, 250)
+]
 
 begin
-    true_samps = 1.0*chain1[:,3:7]
-    true_samps[:,1:4] = (true_samps[:,1:4])
-    scaled_samps = (true_samps .- x_true')./x_denom'
+    true_samps = 1.0*chains[:,3:7]
+    true_samps[:,1:4] = exp.(true_samps[:,1:4])
+    scaled_samps = (true_samps .- x0')./x_denom'
 
     #scaled_samps
 
     thin = 5
 
     f, ax = my_corner(
-        scaled_samps[1:thin:end,:]; labels=labs, weights=chain1[1:thin:end,1], base_dim=5, n_bins=50, lims=my_lims, covmat=nothing
+        scaled_samps[1:thin:end,:]; labels=labs, weights=chains[1:thin:end,1], base_dim=5, n_bins=50, lims=my_lims, covmat=nothing
     )
-    f.savefig("/Users/bradkav/Code/darkdress.jl/figures/corner_5d_reparam_v4.pdf")
+    f.savefig("/Users/bradkav/Code/darkdress.jl/figures/corner_5d.pdf")
     PyPlot.display(f)
 end

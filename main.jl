@@ -5,6 +5,7 @@ include("analysis.jl")  # needs types from binary.jl to be loaded
 # Needs above files to be included
 include("tests.jl")
 include("plotting.jl")
+include("MCMC.jl")
 
 # %%
 test_calcloglike(5000, true, true)
@@ -17,6 +18,9 @@ test_fim_SNR()
 
 # %%
 benchmark_fim()
+
+# %%
+test_N_nodes(N_samples=50, USE_GAUSS=true)
 
 # %%
 """

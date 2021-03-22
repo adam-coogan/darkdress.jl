@@ -117,3 +117,53 @@ function benchmark_calcloglike(N_nodes=10000, USE_GAUSS=true, LOG_SPACE=true)
         )
     end
 end
+
+# %%
+function test_N_nodes(;N_samples=1000, USE_GAUSS=true)
+
+    println("> Testing number of nodes...")
+
+    dd = make_dress(DynamicDress, 1000.0 * MSun, 1.0*MSun, 226 * MSun/pc^3, 7.0/3.0, 1e8*pc, 0.0, 0.0, -1e8*pc/c)
+    f_c = f_isco(m₁(dd))
+    fₗ = f_of_t_to_c(5 * yr, f_c, dd)
+    fₕ = f_c
+
+    x_true = [(dd.γₛ), dd.c_f, (dd.ℳ)/MSun, dd.q, dd.t̃_c]
+    x_true[1:4] = log.(x_true[1:4])
+
+    loglike(x) = like_wrapper(x, dd, fₗ, fₕ)
+    FIM = -1.0*ForwardDiff.hessian(loglike, x_true)
+    covmat = inv(FIM)
+        
+    N_nodes_list = [300, 1000, 3000, 10000, 300000, 100000]
+    likes = zeros(length(N_nodes_list), N_samples)
+
+    for i in 1:length(N_nodes_list)
+        println("> Sampling for N_nodes = $(N_nodes_list[i])...")
+        loglike_test(x) = like_wrapper(x, dd, fₗ, fₕ, N_nodes=N_nodes_list[i], USE_GAUSS=USE_GAUSS)
+        if (i == 1)
+            full_chain = RandomSample(loglike_test, x_true, N_samples, covmat)
+            global samples = full_chain[:,3:end]
+            likes[1,:] = full_chain[:,2]
+        else
+            for j in 1:N_samples           
+                likes[i,j] = loglike_test(samples[j,:])
+            end
+        end
+    end
+
+    l300, l1000, l3000, l10000, l30000, l100000 = [likes[i, :] for i in 1:length(N_nodes_list)]
+
+    Δ300 = abs.(l300 - l100000)./(l100000)
+    Δ3000 = abs.(l3000 - l100000)./(l100000)
+    Δ10000 = abs.(l10000 - l100000)./(l100000)
+    Δ30000 = abs.(l30000 - l100000)./(l100000)
+
+    println("Maximum error (N_nodes = 300): ", maximum(Δ300))
+    println("Maximum error (N_nodes = 3000): ", maximum(Δ3000))
+    println("Maximum error (N_nodes = 10000): ",maximum(Δ10000))
+    println("Maximum error (N_nodes = 30000): ",maximum(Δ30000))
+
+    return samples, likes
+
+end

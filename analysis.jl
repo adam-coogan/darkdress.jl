@@ -178,9 +178,53 @@ function calculate_loglike(
     # Calculate the overlap <h|h>
     hh = calculate_SNR(system_h, fₗ, fₕ, fc_h; N_nodes, USE_GAUSS, LOG_SPACE)^2
     
+
     # Optimise over phase at coalescence and dₗ_ι
     dh = optimize_Φ_c ? sqrt(dh_re^2 + dh_im^2) : dh_re
     r = optimize_dₗ_ι ? dh / hh : 1.
 
     return r * dh - 1/2 * r^2 * hh    
+end
+
+function like_wrapper(x, dd_ref::B, fₗ, fₕ; N_nodes=3000, USE_GAUSS=true, LOG_SPACE=true) where B <: Binary
+
+    α0 = -56.3888135025341
+
+    γₛ  = exp(x[1])
+    c_f = exp(x[2])
+    ℳ   = exp(x[3])*MSun 
+    q   = exp(x[4]) 
+    t̃_c = x[5]
+
+    Φ_c = 0.0
+
+    #Set some parameter boundaries
+    if (γₛ < 0)
+        return -1e30
+    end
+    #if (γₛ > 3)
+    #    return -1e30
+    #end
+    if (c_f < 0)
+        return -1e30
+    end
+    if (q < 0)
+        return -1e30
+    end
+    if (q > 1)
+        return -1e30
+    end
+
+    # Get higher-order constructor to make binaries where the type parameter is
+    # a dual number
+    Constructor = Base.typename(B).wrapper
+
+    #Construct alternative system
+    vals = [γₛ, c_f, ℳ, q, Φ_c, t̃_c, α0]
+    dd_alt = Constructor(vals...)
+
+    fc_ref = f_isco(m₁(dd_ref.ℳ, dd_ref.q))
+    fc_alt = f_isco(m₁(ℳ, q))
+
+    return calculate_loglike(dd_alt, dd_ref, fₗ, fₕ, fc_alt, fc_ref, N_nodes=N_nodes, USE_GAUSS=USE_GAUSS, LOG_SPACE=LOG_SPACE)
 end
